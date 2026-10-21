@@ -590,9 +590,11 @@ async function check(name, work) {
   });
   await check('work: repeated pages and request budgets stop scanning, retaining partial evidence', async () => {
     for (const mode of ['repeat', 'budget']) {
+      // A repeated page must keep the same record ID across second boundaries.
+      const repeatedId = oid(0.1);
       const f = await fixture('homepage', '', {}, { storage: fast({ helperRequestLimit: 10, juanContests: false, juanHomeworks: false }), strictApi: true, api: req => {
         const u = new URL(req.url()), pageNo = Number(u.searchParams.get('page'));
-        if (u.pathname === '/d/test/record') return { body: { rdocs: [{ _id: oid(0.1, mode === 'repeat' ? 1 : pageNo), uid: 1, pid: mode === 'repeat' ? 1 : pageNo, status: 1 }] } };
+        if (u.pathname === '/d/test/record') return { body: { rdocs: [{ _id: mode === 'repeat' ? repeatedId : oid(0.1, pageNo), uid: 1, pid: mode === 'repeat' ? 1 : pageNo, status: 1 }] } };
       } });
       await openWork(f, 'juan-open'); await f.page.locator('[data-exh-action="juan-start"]').click(); await finished(f, 'juan');
       const result = await juanJSON(f); assert.equal(result.complete, false); assert.equal(result.rows[0].total, mode === 'repeat' ? 1 : 10);
