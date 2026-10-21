@@ -1,0 +1,23 @@
+{
+  "name": "extend-hloj-local",
+  "version": "2.3.1",
+  "description": "Extend HLOJ 本地重制版：core、ui、captcha、remote-problem、contest-helper、juan-monitor、user",
+  "private": true,
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "node scripts/build.cjs",
+    "build:check": "node scripts/build.cjs --check",
+    "build:vendor": "node scripts/build-vendor.mjs",
+    "check": "node scripts/check.cjs",
+    "test": "node tests/browser.cjs",
+    "package": "python3 scripts/package-release.py"
+  },
+  "devDependencies": {
+    "dompurify": "3.4.17",
+    "esbuild": "0.28.2",
+    "katex": "0.18.10",
+    "marked": "18.1.1",
+    "marked-katex-extension": "5.1.13",
+    "playwright": "1.62.1"
+  }
+}
