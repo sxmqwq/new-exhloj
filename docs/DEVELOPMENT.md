@@ -11,12 +11,12 @@
 | `scripts/build.cjs` | 把渲染器和第三方许可证插入源码模板，检查版本一致性 |
 | `scripts/build-vendor.mjs` | 通过 esbuild 重建渲染器 |
 | `scripts/package-release.py` | 生成用户安装 ZIP、版本说明与 SHA-256 |
-| `tests/browser.cjs` | 59 组 Chromium 场景，接口由固定响应模拟 |
+| `tests/browser.cjs` | 61 组 Chromium 场景，接口由固定响应模拟 |
 | `tests/fixtures/` | 测试输入，不包含真实账号会话 |
 | `tests/output/` | 测试生成的 JSON/ZIP；不纳入版本控制 |
 | `release/` | 可上传到 GitHub Release 的安装包 |
 
-源码仍使用一个 IIFE，共用内部工具和事件委托；这里没有引入新的模块运行机制。默认构建只替换两个明确的标记，不更改业务逻辑。初次整理后的 `dist/exhloj.user.js` 与已经交付的 2.3.1 完全一致。
+源码仍使用一个 IIFE，共用内部工具和事件委托；这里没有引入新的模块运行机制。默认构建只替换两个明确的标记，不更改业务逻辑。初次整理后的 `dist/exhloj.user.js` 与已经交付的 2.3.1 完全一致；2.3.2 修复用户链接范围与 CCF SVG 徽章。
 
 ## 源码位置
 

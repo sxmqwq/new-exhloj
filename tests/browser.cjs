@@ -476,7 +476,7 @@ async function check(name, work) {
   async function juanJSON(f) { return JSON.parse((await downloaded(f, 'juan-json')).toString()); }
 
   await check('work: branding, module switches, menu deduplication and default no background requests', async () => {
-    assert.match(script, /\/\/ @name\s+Extend HLOJ\n/); assert.match(script, /\/\/ @version\s+2\.3\.1/);
+    assert.match(script, /\/\/ @name\s+Extend HLOJ\n/); assert.match(script, /\/\/ @version\s+2\.3\.2/);
     const f = await fixture('contest_detail', '<ol id="menu-nav-user"></ol>', { tdoc }, { path: `/d/test/contest/${tid}`, storage: fast() });
     await f.page.waitForTimeout(500);
     assert.equal(f.requests.length, 1); assert.equal(await f.page.locator('[data-exh-work-menu]').count(), 3);
@@ -636,6 +636,55 @@ async function check(name, work) {
     await f.page.evaluate(() => document.querySelector('#late-user').textContent = 'changed'); await f.page.waitForTimeout(300); assert.equal(await f.page.locator('#late-user .exhloj-user-ccf').count(), 1);
     await f.page.locator('[data-exh-action="close"]').click(); await f.page.locator('[data-exh-fallback]').click(); await f.page.locator('[name="userModule"]').uncheck(); await f.page.locator('[data-exh-action="save-settings"]').click();
     assert.equal(await f.page.locator('#named').innerHTML(), '<em>旧姓名</em> (old)'); assert.equal(await f.page.locator('.exhloj-user-ccf').count(), 0); assert.equal(await f.page.locator('#named.exhloj-user-name').count(), 0); await f.done();
+  });
+  await check('user: Hydro level badges and avatar links never become a second username', async () => {
+    const users = { oiers: { 7: { name: '陈思宁', uname: '陈思宁', level: 6 } }, teachers: [], practice: {} };
+    const body = `<style>.user-profile-link{font:16px Arial}.user-profile-badge{background:#89b967;color:white;padding:2px 5px}.user-profile-avatar{background:#eee;border-radius:50%;vertical-align:middle}.fixture-user-row{padding:12px;width:max-content}</style>
+      <table class="fixture-user-row"><tbody><tr><td style="padding-right:32px">21</td><td class="col--user"><span class="user-profile-link">
+        <a id="avatar-only" href="/user/7"><img class="small user-profile-avatar v-center" width="20" height="20" alt=""></a>
+        <a id="hydro-name" class="user-profile-name uname--lv6" href="/user/7">陈思宁</a>
+        <a id="site-level" class="user-profile-badge v-center badge--lv6" href="/user/7" data-tooltip="LV 6: Top 5%">LV 6</a>
+        <span id="site-role" class="user-profile-badge v-center badge--mod">MOD</span>
+      </span></td></tr></tbody></table>`;
+    const f = await fixture('contest_scoreboard', body, { udict: { 7: { uname: '陈思宁' } } }, { storage: userStorage({ userDisplay: 'display-username-realname-color', userCCF: true }, users, {}) });
+    assert.equal(await f.page.locator('#site-level').textContent(), 'LV 6');
+    assert.equal(await f.page.locator('#site-level').getAttribute('class'), 'user-profile-badge v-center badge--lv6');
+    assert.equal(await f.page.locator('#site-level').getAttribute('data-tooltip'), 'LV 6: Top 5%');
+    assert.equal(await f.page.locator('#site-role').textContent(), 'MOD');
+    assert.equal(await f.page.locator('#avatar-only img').count(), 1);
+    assert.equal(await f.page.locator('#avatar-only').textContent(), '');
+    assert.equal(await f.page.locator('#hydro-name').textContent(), '陈思宁 (陈思宁)');
+    assert.equal(await f.page.locator('.exhloj-user-ccf').count(), 1);
+    await f.page.locator('.fixture-user-row').screenshot({ path: 'tests/output/user-badge-row.png' });
+    await f.page.evaluate(() => { document.querySelector('#site-level').textContent = 'LV 7'; document.body.append(document.createElement('p')); });
+    await f.page.waitForTimeout(300);
+    assert.equal(await f.page.locator('#site-level').textContent(), 'LV 7');
+    assert.equal(await f.page.locator('.exhloj-user-ccf').count(), 1);
+    await f.page.locator('[data-exh-fallback]').click(); await f.page.locator('[name="userModule"]').uncheck(); await f.page.locator('[data-exh-action="save-settings"]').click();
+    assert.equal(await f.page.locator('#hydro-name').textContent(), '陈思宁');
+    assert.equal(await f.page.locator('#site-level').textContent(), 'LV 7');
+    assert.equal(await f.page.locator('.exhloj-user-ccf').count(), 0);
+    assert.equal(f.requests.length, 1); await f.done();
+  });
+  await check('user: CCF rosette SVG uses the three level colors without adding text glyphs', async () => {
+    const levels = [2, 3, 5, 6, 7, 8, 10];
+    const users = { oiers: Object.fromEntries(levels.map(level => [100 + level, { name: `Level ${level}`, level }])), teachers: [], practice: {} };
+    const body = '<div id="badge-tiers" style="font:16px Arial;width:max-content;padding:12px">' + levels.map(level => `<p><a class="user-profile-name" id="ccf-${level}" href="/user/${100 + level}">CCF ${level} 级</a></p>`).join('') + '</div>';
+    const f = await fixture('homepage', body, {}, { storage: userStorage({ userCCF: true }, users, {}) });
+    for (const level of levels) {
+      const link = f.page.locator(`#ccf-${level}`), badge = link.locator('.exhloj-user-ccf');
+      assert.equal(await link.textContent(), `CCF ${level} 级`);
+      assert.equal(await badge.count(), level < 3 ? 0 : 1);
+      if (level < 3) continue;
+      const svg = badge.locator('svg'); assert.equal(await svg.count(), 1);
+      assert.equal(await svg.getAttribute('viewBox'), '0 0 16 16');
+      assert.equal(await svg.evaluate(node => node.namespaceURI), 'http://www.w3.org/2000/svg');
+      assert.equal(await badge.getAttribute('aria-label'), `CCF ${level} 级`);
+      assert.equal(await badge.evaluate(node => getComputedStyle(node).color), level <= 5 ? 'rgb(94, 185, 94)' : level <= 7 ? 'rgb(52, 152, 219)' : 'rgb(241, 196, 15)');
+      const bounds = await svg.boundingBox(); assert.ok(bounds.width >= 14 && bounds.width <= 18 && Math.abs(bounds.width - bounds.height) < 1);
+    }
+    await f.page.locator('#badge-tiers').screenshot({ path: 'tests/output/user-badge-tiers.png' });
+    assert.equal(f.requests.length, 1); await f.done();
   });
   await check('user: JSON import/export round trip, legacy arrays, unknown sensitive keys excluded and invalid import atomic', async () => {
     const f = await fixture('homepage', '', {}, { storage: userStorage() }); await openWork(f, 'user-open'); const exported = await userData(f); assert.equal(exported.format, 'exhloj-user'); assert.equal(exported.ratings.records.length, 5);

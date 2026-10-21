@@ -1,6 +1,6 @@
 # Extend HLOJ
 
-Extend HLOJ 的本地重制版，当前版本 **2.3.1**。安装在 Tampermonkey 中，增强 HLOJ / 部分 Hydro 页面的训练体验。
+Extend HLOJ 的本地重制版，当前版本 **2.3.2**。安装在 Tampermonkey 中，增强 HLOJ / 部分 Hydro 页面的训练体验。
 
 本版保留原脚本的作者信息，恢复了以下七个模块，不依赖原插件的共享后端。
 
@@ -21,7 +21,7 @@ Extend HLOJ 的本地重制版，当前版本 **2.3.1**。安装在 Tampermonkey
 3. 升级已有版本时，推荐直接在原脚本的编辑器中替换全文，以保留设置和缓存。作为新脚本安装时，先停用旧脚本，再按需导入旧版 JSON 备份。
 4. 刷新 OJ，在用户菜单或右下角 **Extend HLOJ** 按钮打开设置。
 
-现成的安装包位于 [`release/exhloj-2.3.1.zip`](release/exhloj-2.3.1.zip)，其中包含脚本、安装说明、版本信息和第三方许可证。
+现成的安装包位于 [`release/exhloj-2.3.2.zip`](release/exhloj-2.3.2.zip)，其中包含脚本、安装说明、版本信息和第三方许可证。
 
 完整使用说明见 [`docs/INSTALL.zh-CN.txt`](docs/INSTALL.zh-CN.txt)。本仓库没有预设 GitHub 用户名，也没有自动更新地址；发布到自己的仓库后，可按需要自行配置。
 
@@ -82,7 +82,7 @@ npm run package
 
 ## 验证
 
-当前 **59 组 Chromium 浏览器场景通过**，覆盖七个模块及 OIerDb 的 24 条获奖记录示例。测试拦截页面和接口请求，使用固定响应，不需要 OJ 账号。测试输出在 `tests/output/`。
+当前 **61 组 Chromium 浏览器场景通过**，覆盖七个模块及 OIerDb 的 24 条获奖记录示例。测试拦截页面和接口请求，使用固定响应，不需要 OJ 账号。测试输出在 `tests/output/`。
 
 验证记录见 [`docs/validation-result.json`](docs/validation-result.json)。这些检查不代表已经完成 HLOJ 登录态实测；站点特有模板或权限差异仍可能影响实际效果。
 
@@ -92,7 +92,7 @@ npm run package
 
 解压后，将目录内的文件上传到你的仓库根目录，包括 `.github`、`.gitignore` 和 `.gitattributes`。源码、构建产物、说明和测试已分开整理。
 
-创建 GitHub Release 时，可以上传 `release/exhloj-2.3.1.zip` 和 `dist/exhloj.user.js`。更改功能后先构建、测试，再生成对应版本的安装包。
+创建 GitHub Release 时，可以上传 `release/exhloj-2.3.2.zip` 和 `dist/exhloj.user.js`。更改功能后先构建、测试，再生成对应版本的安装包。
 
 ## 来源与许可证说明
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Extend HLOJ
 // @namespace    exhloj-local
-// @version      2.3.1
+// @version      2.3.2
 // @description  core/ui/captcha/remote-problem/contest-helper/juan-monitor/user；本地重制，无旧后端依赖。
 // @author       Extend HLOJ Dev Team (original); Local restoration
 // @match        *://oj.hailiangedu.com/*
@@ -46,9 +46,9 @@
   if (!(location.hostname === 'oj.hailiangedu.com' ||
       location.host === 'www.nfls.com.cn:10611' || /(^|\.)oifha\.com$/.test(location.hostname))) return;
   if (document.documentElement.dataset.exhlojCoreUi) return;
-  document.documentElement.dataset.exhlojCoreUi = '2.3.1';
+  document.documentElement.dataset.exhlojCoreUi = '2.3.2';
 
-  const VERSION = '2.3.1';
+  const VERSION = '2.3.2';
   const SETTINGS_KEY = 'exhloj.coreui.settings.v1';
   const CACHE_KEY = 'exhloj.coreui.cache.v1';
   const CAPTCHA_KEY = 'exhloj.local.captcha.history';
@@ -220,7 +220,9 @@
     .exhloj-user-level-1{color:grey!important}.exhloj-user-level-2{color:green!important}.exhloj-user-level-3{color:#03a89e!important}
     .exhloj-user-level-4{color:#00f!important}.exhloj-user-level-5{color:#a0a!important}.exhloj-user-level-6{color:#ff8c00!important}
     :is(.exhloj-user-level-7,.exhloj-user-level-8,.exhloj-user-level-9,.exhloj-user-level-10){color:red!important}.exhloj-user-level-teacher{color:#000!important}
-    .exhloj-user-ccf{font-weight:700;white-space:nowrap}.exhloj-user-ccf-green{color:#4a9e4a}.exhloj-user-ccf-blue{color:#3498db}.exhloj-user-ccf-gold{color:#bc8c00}
+    .exhloj-user-ccf{display:inline-flex;width:1em;height:1em;margin-inline-start:.25em;vertical-align:-.125em;line-height:1;white-space:nowrap}
+    .exhloj-user-ccf>svg{display:block;width:100%;height:100%;fill:currentColor}
+    .exhloj-user-ccf-green{color:#5eb95e}.exhloj-user-ccf-blue{color:#3498db}.exhloj-user-ccf-gold{color:#f1c40f}
     .exhloj-user-gain{color:green}.exhloj-user-loss{color:#c33}.exhloj-user-data{display:grid;grid-template-columns:auto 1fr;gap:4px 12px}
     .exhloj-user-data dt,.exhloj-user-data dd{margin:0;overflow-wrap:anywhere}#exhloj-local-user-card{padding:12px}
     [data-exh-user-column]{text-align:center;white-space:nowrap}#exhloj-user-commands,#exhloj-user-json{height:230px!important}
@@ -1715,12 +1717,23 @@
     node.classList.remove('exhloj-user-name', ...Array.from({ length: 10 }, (_, i) => `exhloj-user-level-${i + 1}`), 'exhloj-user-level-teacher');
     node.removeAttribute('data-exh-user-rendered');
   }
+  function ccfBadge(level) {
+    const badge = el('span', { class: `exhloj-user-ccf exhloj-user-ccf-${level <= 5 ? 'green' : level <= 7 ? 'blue' : 'gold'}`, title: `本地资料：CCF ${level} 级`, 'aria-label': `CCF ${level} 级` });
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 16 16'); svg.setAttribute('width', '16'); svg.setAttribute('height', '16'); svg.setAttribute('aria-hidden', 'true'); svg.setAttribute('focusable', 'false');
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', 'M16 8C16 6.84375 15.25 5.84375 14.1875 5.4375C14.6562 4.4375 14.4688 3.1875 13.6562 2.34375C12.8125 1.53125 11.5625 1.34375 10.5625 1.8125C10.1562 0.75 9.15625 0 8 0C6.8125 0 5.8125 0.75 5.40625 1.8125C4.40625 1.34375 3.15625 1.53125 2.34375 2.34375C1.5 3.1875 1.3125 4.4375 1.78125 5.4375C0.71875 5.84375 0 6.84375 0 8C0 9.1875 0.71875 10.1875 1.78125 10.5938C1.3125 11.5938 1.5 12.8438 2.34375 13.6562C3.15625 14.5 4.40625 14.6875 5.40625 14.2188C5.8125 15.2812 6.8125 16 8 16C9.15625 16 10.1562 15.2812 10.5625 14.2188C11.5938 14.6875 12.8125 14.5 13.6562 13.6562C14.4688 12.8438 14.6562 11.5938 14.1875 10.5938C15.25 10.1875 16 9.1875 16 8ZM11.4688 6.625L7.375 10.6875C7.21875 10.8438 7 10.8125 6.875 10.6875L4.5 8.3125C4.375 8.1875 4.375 7.96875 4.5 7.8125L5.3125 7C5.46875 6.875 5.6875 6.875 5.8125 7.03125L7.125 8.34375L10.1562 5.34375C10.3125 5.1875 10.5312 5.1875 10.6562 5.34375L11.4688 6.15625C11.5938 6.28125 11.5938 6.5 11.4688 6.625Z');
+    svg.append(path); badge.append(svg); return badge;
+  }
   function refreshUserNames() {
     const store = userStore();
     for (const [node, state] of userNameNodes) if (!node.isConnected) userNameNodes.delete(node);
     if (!settings.userModule) { for (const [node, state] of userNameNodes) resetUserName(node, state); userNameNodes.clear(); return; }
     const candidates = $$('.user-profile-name, .col--submit-by>a, .col--user a[href], a.username[href], a[data-exh-user]')
-      .filter(node => !node.closest('#exhloj-local-dialog, #exhloj-local-user-card') && !$('.user-profile-name', node));
+      .filter(node => !node.closest('#exhloj-local-dialog, #exhloj-local-user-card, .user-profile-badge') && !$('.user-profile-name', node)
+        && (node.matches('.user-profile-name, a.username, a[data-exh-user]') || node.textContent.trim()));
+    const active = new Set(candidates);
+    for (const [node, state] of userNameNodes) if (!active.has(node)) { resetUserName(node, state); userNameNodes.delete(node); }
     for (const node of candidates) {
       const uid = uidFromNode(node); if (!(uid > 0)) continue;
       let state = userNameNodes.get(node);
@@ -1738,7 +1751,7 @@
       if (mode === 'no-change') node.replaceChildren(...state.nodes); else node.textContent = text;
       node.classList.remove('exhloj-user-name', ...Array.from({ length: 10 }, (_, i) => `exhloj-user-level-${i + 1}`), 'exhloj-user-level-teacher');
       if (mode.endsWith('-color')) node.classList.add('exhloj-user-name', `exhloj-user-level-${level}`);
-      if (settings.userCCF && profile?.level >= 3) node.append(el('span', { class: `exhloj-user-ccf exhloj-user-ccf-${profile.level <= 5 ? 'green' : profile.level <= 7 ? 'blue' : 'gold'}`, title: `本地资料：CCF ${profile.level} 级`, 'aria-label': `CCF ${profile.level} 级` }, ' ✓'));
+      if (settings.userCCF && profile?.level >= 3) node.append(ccfBadge(profile.level));
       node.dataset.exhUserRendered = signature; state.applied = node.innerHTML;
     }
   }
