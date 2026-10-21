@@ -1,8 +1,8 @@
 {
-  "version": "2.3.2",
-  "scriptSha256": "d0af40ee3e196880aa5bdfb9e3f34847c39aaeeb52bd6344f38ba94b1d038949",
+  "version": "2.4.0",
+  "scriptSha256": "a7f0c932671f1ef21439d21f1e7f3a2830f725c514d38ee25b81ef48de108fb6",
   "browser": "153.0.8010.0",
-  "passed": 61,
+  "passed": 67,
   "checks": [
     "core: guest fallback, lazy user menu, deduplication, no automatic writes/requests",
     "core: save UI switch and preserve ports across reinstall/page load",
@@ -60,10 +60,16 @@
     "user: legacy display options, recent twenty-contest metrics, and escaped imported profile names",
     "user: exact request budget allows calculation and blocks only the next network request",
     "oier: profile and permission panels are outside nested accepted-problem columns and repair misplaced panels",
-    "oier: full supplied Markdown imports twenty-four awards with decimal scores and preserves unrelated fields",
-    "oier: actual HTML paste autofills without fetching images, running scripts, or saving before confirmation",
-    "oier: browser plain-text tables support tab-separated and per-cell line copies",
-    "oier: academic years use September in Shanghai and ranking links never become profile IDs",
-    "oier: malformed paste is atomic, partial rows are reported and unrelated fields survive partial imports"
+    "oier: profile links import all awards and persist the exact ID after saving, including guests",
+    "oier: pasting a profile URL reads data, while page text, ranking links and foreign URLs make no requests",
+    "oier: refreshing a new database updates only OIerDb fields and immediately saves the bound ID",
+    "oier: bulk refresh shares one download and keeps missing, unbound and unrelated local data",
+    "oier: unchanged database versions recheck metadata and reuse data files",
+    "oier: refresh preserves edits made while downloading and skips a changed person binding",
+    "oier: HTTP, redirect, malformed, corrupt and incomplete downloads preserve old data and remain retryable",
+    "oier: cancellation aborts the download and a changed editor link cannot receive stale data",
+    "oier: disabling the user module cancels public-data reads without saving profiles",
+    "oier: zero-based contest and school IDs, missing scores, grade overrides and empty records match the database",
+    "oier: database text is rendered literally and selected profile refresh works outside the editor"
   ]
 }

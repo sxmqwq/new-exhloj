@@ -47,10 +47,11 @@ async function fixture(name, body, context = {}, options = {}) {
     window.GM_xmlhttpRequest = options => {
       if (options.method === 'GET') {
         window.__gm.push({ url: options.url, method: 'GET', headers: options.headers, anonymous: options.anonymous });
-        const response = window.__remote[options.url];
+        const response = window.__remote[options.url] || window.__remote[options.url.split('?')[0]];
         if (!response) return queueMicrotask(() => options.onerror(new Error('Unexpected external URL')));
-        return setTimeout(() => options.onload({ status: response.status || 200,
+        const timer = setTimeout(() => options.onload({ status: response.status || 200,
           responseText: response.text ?? JSON.stringify(response.json), finalUrl: response.finalUrl || options.url }), response.delay || 0);
+        return { abort() { clearTimeout(timer); options.onabort?.(); } };
       }
       window.__gm.push({ url: options.url, method: options.method, payload: JSON.parse(options.data) });
       options.onload({ status: 200 });
@@ -476,7 +477,7 @@ async function check(name, work) {
   async function juanJSON(f) { return JSON.parse((await downloaded(f, 'juan-json')).toString()); }
 
   await check('work: branding, module switches, menu deduplication and default no background requests', async () => {
-    assert.match(script, /\/\/ @name\s+Extend HLOJ\n/); assert.match(script, /\/\/ @version\s+2\.3\.2/);
+    assert.match(script, /\/\/ @name\s+Extend HLOJ\n/); assert.match(script, /\/\/ @version\s+2\.4\.0/);
     const f = await fixture('contest_detail', '<ol id="menu-nav-user"></ol>', { tdoc }, { path: `/d/test/contest/${tid}`, storage: fast() });
     await f.page.waitForTimeout(500);
     assert.equal(f.requests.length, 1); assert.equal(await f.page.locator('[data-exh-work-menu]').count(), 3);
@@ -606,7 +607,7 @@ async function check(name, work) {
   const ratingSample = { contests: [[`test/${tid}`, 'Round 1', 1], [`test/${tid2}`, 'Round 2', 1]], records: [[7, 0, 1, 1900, 2100], [8, 0, 2, 1700, 1600], [7, 1, 2, 1800, 1700], [8, 1, 1, 1800, 2000], [9, 1, 1, 1800, 2000]], commands: '# sample' };
   const userStorage = (options = {}, users = userSample, ratings = ratingSample) => ({ ...fast(options), 'exhloj.coreui.cache.v1': { 'exhloj.user': users, 'exhloj.ratedcontests': ratings, 'exhloj.problemOriginCache': { keep: true } } });
   async function userData(f) { return JSON.parse((await downloaded(f, 'user-export')).toString()); }
-  async function openEditor(f, uid) { await openWork(f, 'user-open'); await f.page.locator('#exhloj-user-id').fill(String(uid)); await f.page.locator('#exhloj-local-dialog [data-exh-action="user-edit"]').click(); }
+  async function openEditor(f, uid) { await openWork(f, 'user-open'); await f.page.locator('#exhloj-user-id').fill(String(uid)); await f.page.locator('#exhloj-local-dialog [data-exh-action="user-edit"]:not([data-uid])').click(); }
 
   await check('user: ordinary and signed-out users can edit any local UID with no OJ writes', async () => {
     for (const userId of [42, 0]) {
@@ -756,11 +757,21 @@ async function check(name, work) {
     await f.page.locator('#exhloj-user-commands').fill(commands(10)); await f.page.locator('[data-exh-action="user-calculate"]').click(); await finished(f, 'user'); const data = await userData(f); assert.equal(data.ratings.records.at(-1)[3], 1810); assert.equal(f.requests.filter(r => r.kind === 'fetch').length, 10);
     await f.page.locator('#exhloj-user-commands').fill(commands(11)); await f.page.locator('[data-exh-action="user-calculate"]').click(); await finished(f, 'user'); assert.deepEqual(await userData(f), data); assert.equal(f.requests.filter(r => r.kind === 'fetch').length, 20); assert.match(await f.page.locator('[data-work-errors="user"]').textContent(), /10 次请求上限/); await f.done();
   });
-  const oierExample = fs.readFileSync('tests/fixtures/oier-paste-example.md', 'utf8');
-  const cleanFixtureCell = value => value.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/\*\*/g, '').trim();
-  const oierTableRows = oierExample.split('\n').filter(line => line.startsWith('|')).map(line => line.slice(1, -1).split('|').map(cleanFixtureCell)).filter((row, index) => index !== 1);
-  const oierTSV = '王茂骅\n选手信息\n现在高二。\nOIerDb 排名：1（144743.67 分）。\nCCF 程序设计能力等级：10 级（仅供参考）。\n获奖信息\n' + oierTableRows.map(row => row.join('\t')).join('\n');
-  async function clipboardPaste(f, text, html = '') { await f.page.locator('#exhloj-user-oier-paste').evaluate((area, data) => { const clipboardData = new DataTransfer(); clipboardData.setData('text/plain', data.text); if (data.html) clipboardData.setData('text/html', data.html); area.dispatchEvent(new ClipboardEvent('paste', { clipboardData, bubbles: true, cancelable: true })); }, { text, html }); }
+  const OIER_TEST_API = 'https://oier.api.baoshuo.dev';
+  const oierStatic = fs.readFileSync('tests/fixtures/oierdb-static.json', 'utf8'), oierResult = fs.readFileSync('tests/fixtures/oierdb-result.txt', 'utf8');
+  function oierRemotes(statics = oierStatic, result = oierResult) {
+    const remote = {};
+    for (const [kind, text] of [['static', statics], ['result', result]]) {
+      const sha512 = crypto.createHash('sha512').update(text).digest('hex');
+      remote[`${OIER_TEST_API}/${kind}.info.json`] = { text: JSON.stringify({ sha512, size: Buffer.byteLength(text) }) };
+      remote[`${OIER_TEST_API}/${kind}.${sha512.slice(0, 7)}.${kind === 'static' ? 'json' : 'txt'}`] = { text };
+    }
+    return remote;
+  }
+  async function savedOIer(f) { return f.page.evaluate(() => { const cache = window.__store['exhloj.coreui.cache.v1']; return (typeof cache === 'string' ? JSON.parse(cache) : cache)['exhloj.user']; }); }
+  async function gmRequests(f) { return f.page.evaluate(() => window.__gm); }
+  async function importOIer(f, id) { await f.page.locator('[name="oierURL"]').fill(`${OIER_TEST_API.replace('oier.api.', 'oier.')}/oier/${id}`); await f.page.locator('[data-exh-action="user-oier-import"]').click(); await finished(f, 'oier'); }
+  async function pasteOIerURL(f, text) { await f.page.locator('[name="oierURL"]').evaluate((area, text) => { const clipboardData = new DataTransfer(); clipboardData.setData('text/plain', text); area.dispatchEvent(new ClipboardEvent('paste', { clipboardData, bubbles: true, cancelable: true })); }, text); }
 
   await check('oier: profile and permission panels are outside nested accepted-problem columns and repair misplaced panels', async () => {
     const body = '<div class="section" id="profile-section"><div class="profile-header">Profile</div><div class="profile-content"><div id="accepted-problems"><h1>通过的题目</h1><div class="row">' + Array.from({ length: 4 }, (_, i) => `<div class="medium-3 columns"><ul><li>P${i + 1}</li></ul></div>`).join('') + '</div></div></div></div>';
@@ -773,44 +784,130 @@ async function check(name, work) {
       assert.equal(await f.page.locator('#accepted-problems .medium-3.columns').count(), 4); assert.equal(f.requests.length, 1); await f.done();
     }
   });
-  await check('oier: full supplied Markdown imports twenty-four awards with decimal scores and preserves unrelated fields', async () => {
-    const f = await fixture('homepage', '', {}, { storage: userStorage() }); await openEditor(f, 7);
-    const before = await f.page.evaluate(() => JSON.stringify(window.__store)); await f.page.locator('#exhloj-user-oier-paste').fill(oierExample); await f.page.locator('[data-exh-action="user-oier-parse"]').click();
-    assert.equal(await f.page.locator('[name="name"]').inputValue(), '王茂骅'); assert.equal(await f.page.locator('[name="level"]').inputValue(), '10'); assert.equal(await f.page.locator('[name="oierId"]').inputValue(), '1234'); assert.equal(await f.page.locator('[name="uname"]').inputValue(), 'seven'); assert.equal(await f.page.locator('[name="teacher"]').isChecked(), true); assert.equal(await f.page.locator('[name="practice"]').inputValue(), '123');
-    assert.equal(await f.page.evaluate(() => JSON.stringify(window.__store)), before); const rows = JSON.parse(await f.page.locator('[name="awards"]').inputValue()); assert.equal(rows.length, 24);
+  await check('oier: profile links import all awards and persist the exact ID after saving, including guests', async () => {
+    const users = structuredClone(userSample); users.oiers[7].oierId = 0;
+    const f = await fixture('homepage', '', {}, { userId: 0, storage: userStorage({}, users), remote: oierRemotes() }); await openEditor(f, 7);
+    assert.equal(await f.page.locator('#exhloj-user-oier-paste').count(), 0);
+    assert.equal(await f.page.locator('[name="oierId"]').getAttribute('readonly'), '');
+    const before = await f.page.evaluate(() => JSON.stringify(window.__store)); await importOIer(f, 1234);
+    assert.equal(await f.page.locator('[name="name"]').inputValue(), '王茂骅'); assert.equal(await f.page.locator('[name="level"]').inputValue(), '10');
+    assert.equal(await f.page.locator('[name="grade"]').inputValue(), '2028'); assert.equal(await f.page.locator('[name="oierId"]').inputValue(), '1234');
+    assert.equal(await f.page.locator('[name="uname"]').inputValue(), 'seven'); assert.equal(await f.page.locator('[name="teacher"]').isChecked(), true); assert.equal(await f.page.locator('[name="practice"]').inputValue(), '123');
+    assert.equal(await f.page.evaluate(() => JSON.stringify(window.__store)), before);
+    const rows = JSON.parse(await f.page.locator('[name="awards"]').inputValue()); assert.equal(rows.length, 24);
     assert.deepEqual(rows[0], { contest: 'NOI2026', awards: '金牌', score: 641, fullScore: 705, rank: 12, participants: 283, province: '山东', school: '烟台青华中学', grade: '高一', contestId: 139, schoolId: 1091 });
-    assert.equal(rows[15].score, 165.36); assert.equal(rows.at(-1).score, 188); assert.equal(rows.at(-1).school, '东北育才学校'); assert.match(await f.page.locator('#exhloj-user-oier-status').textContent(), /24 条获奖记录/);
-    await f.page.locator('[data-exh-action="user-save"]').click(); const saved = await f.page.evaluate(() => JSON.parse(window.__store['exhloj.coreui.cache.v1'])['exhloj.user'].oiers[7]); assert.equal(saved.oierRank, 1); assert.equal(saved.oierScore, 144743.67); assert.equal(saved.records.length, 24);
-    await f.page.locator('[name="name"]').fill('王茂骅（本地备注）'); await f.page.locator('[data-exh-action="user-save"]').click(); assert.equal(await f.page.evaluate(() => JSON.parse(window.__store['exhloj.coreui.cache.v1'])['exhloj.user'].oiers[7].oierScore), 144743.67); assert.equal(f.requests.length, 1); await f.done();
+    assert.equal(rows[15].score, 165.36); assert.equal(rows.at(-1).school, '东北育才学校');
+    await f.page.locator('[data-exh-action="user-save"]').click(); const data = await savedOIer(f), saved = data.oiers[7];
+    assert.equal(saved.oierId, 1234); assert.equal(saved.oierRank, 2); assert.equal(saved.oierScore, 144743.67); assert.ok(saved.oierSyncedAt > 0); assert.match(saved.oierVersion, /^[a-f\d]{7}\/[a-f\d]{7}$/);
+    assert.deepEqual(await f.page.evaluate(() => JSON.parse(window.__store['exhloj.coreui.cache.v1'])['exhloj.ratedcontests']), ratingSample);
+    const requests = await gmRequests(f); assert.equal(requests.length, 4); assert.ok(requests.every(r => r.method === 'GET' && r.anonymous === true && new URL(r.url).origin === OIER_TEST_API));
+    assert.equal(f.requests.length, 1); await f.done();
   });
-  await check('oier: actual HTML paste autofills without fetching images, running scripts, or saving before confirmation', async () => {
-    const html = '<h2>&lt;img src=x onerror="window.injected=1"&gt;</h2><h4>选手信息</h4><p>现在初二。</p><p>OIerDb 排名：<a href="/oier?page=1">1</a>（100.25 分）。</p><p>CCF 程序设计能力等级：7 级（仅供参考）。</p><h4>获奖信息</h4><table><tr><th>奖项</th><th>分数</th><th>选手排名</th><th>省份</th><th>就读学校</th><th>年级</th></tr><tr><td><a href="/contest/99">APIO2022 线上</a> <img src="https://evil.test/a.svg" alt="🥈" onerror="window.injected=1">银牌</td><td>165.36 / 300</td><td>31 / 191</td><td>辽宁</td><td><a href="/school/3099">学校 &amp; 附小</a></td><td>六年级</td></tr></table><script>window.injected=1</script>';
-    const f = await fixture('user_detail', '', { udoc: { _id: 7, perm: 'BigInt::1' } }, { storage: userStorage(), path: '/user/7' }); await openEditor(f, 7); const before = await f.page.evaluate(() => JSON.stringify(window.__store));
-    await clipboardPaste(f, '选手信息，复制网页时保留表格', html); assert.equal(await f.page.locator('[name="level"]').inputValue(), '7'); assert.equal(await f.page.locator('[name="name"]').inputValue(), '<img src=x onerror="window.injected=1">'); assert.equal(await f.page.evaluate(() => JSON.stringify(window.__store)), before);
-    const rows = JSON.parse(await f.page.locator('[name="awards"]').inputValue()); assert.equal(rows[0].school, '学校 & 附小'); assert.equal(rows[0].schoolId, 3099); assert.equal(rows[0].contestId, 99);
-    await f.page.locator('[data-exh-action="user-save"]').click(); assert.equal(await f.page.locator('#exhloj-local-user-card img, #exhloj-local-user-card script').count(), 0); assert.equal(await f.page.evaluate(() => window.injected), undefined); assert.equal(f.requests.length, 1); await f.done();
+  await check('oier: pasting a profile URL reads data, while page text, ranking links and foreign URLs make no requests', async () => {
+    const f = await fixture('homepage', '', {}, { storage: userStorage(), remote: oierRemotes() }); await openEditor(f, 7);
+    for (const value of ['王茂骅\n选手信息\n获奖信息', '1234', '/oier/1234', 'https://oier.baoshuo.dev/oier?page=1', 'https://oier.baoshuo.dev/contest/139', 'https://oier.baoshuo.dev.evil.test/oier/1234', 'https://u:p@oier.baoshuo.dev/oier/1234', 'https://oier.baoshuo.dev:8443/oier/1234']) {
+      await f.page.locator('[name="oierURL"]').fill(value); await f.page.locator('[data-exh-action="user-oier-import"]').click();
+      assert.match(await f.page.locator('#exhloj-user-oier-status').textContent(), /读取失败/);
+    }
+    assert.deepEqual(await gmRequests(f), []);
+    await pasteOIerURL(f, 'https://oier.baoshuo.dev/oier/1234/?from=share#profile'); await finished(f, 'oier');
+    assert.equal(await f.page.locator('[name="name"]').inputValue(), '王茂骅'); assert.equal(await f.page.locator('[name="oierId"]').inputValue(), '1234');
+    assert.equal((await gmRequests(f)).length, 4); assert.equal((await savedOIer(f)).oiers[7].name, '七号');
+    await importOIer(f, 999999); assert.match(await f.page.locator('#exhloj-user-oier-status').textContent(), /未找到/);
+    assert.equal(await f.page.locator('[name="name"]').inputValue(), '王茂骅'); assert.equal(await f.page.locator('[name="oierId"]').inputValue(), '1234'); await f.done();
   });
-  await check('oier: browser plain-text tables support tab-separated and per-cell line copies', async () => {
-    const f = await fixture('homepage', '', {}, { storage: userStorage() }); await openEditor(f, 7);
-    for (const text of [oierTSV, oierTSV.replaceAll('\t', '\n')]) {
-      await clipboardPaste(f, text); assert.equal(await f.page.locator('[name="name"]').inputValue(), '王茂骅'); const rows = JSON.parse(await f.page.locator('[name="awards"]').inputValue()); assert.equal(rows.length, 24); assert.equal(rows[15].score, 165.36); assert.equal(rows.at(-1).grade, '三年级');
-    } assert.equal(f.requests.length, 1); await f.done();
+  await check('oier: refreshing a new database updates only OIerDb fields and immediately saves the bound ID', async () => {
+    const f = await fixture('homepage', '', {}, { storage: userStorage(), remote: oierRemotes() }); await openEditor(f, 7); await importOIer(f, 1234); await f.page.locator('[data-exh-action="user-save"]').click();
+    const updated = oierResult.replace('WMH,王茂骅', 'WMH,数据库新姓名').replace(',1000,10,', ',1000,9,').replace('139:1091:641.0:', '139:1091:650:');
+    await f.page.evaluate(remote => { window.__remote = remote; }, oierRemotes(oierStatic, updated));
+    await f.page.locator('[data-exh-action="user-oier-refresh"]').click(); await finished(f, 'oier');
+    const saved = await savedOIer(f); assert.equal(saved.oiers[7].name, '数据库新姓名'); assert.equal(saved.oiers[7].level, 9); assert.equal(saved.oiers[7].records[0].score, 650); assert.equal(saved.oiers[7].oierId, 1234);
+    assert.equal(saved.oiers[7].uname, 'seven'); assert.deepEqual(saved.teachers, [7]); assert.equal(saved.practice[7], 123);
+    assert.deepEqual(await f.page.evaluate(() => JSON.parse(window.__store['exhloj.coreui.cache.v1'])['exhloj.ratedcontests']), ratingSample);
+    assert.equal((await gmRequests(f)).length, 8); assert.equal(f.requests.length, 1); await f.done();
   });
-  await check('oier: academic years use September in Shanghai and ranking links never become profile IDs', async () => {
-    const f = await fixture('homepage', '', {}, { storage: userStorage() });
-    const parsed = await f.page.evaluate(example => {
-      const parse = window.UiContext.exhloj.user.parseOIer;
-      return [parse(example, '', '', '2026-10-21T00:00:00Z'), parse(example, '', '', '2026-08-31T15:59:59Z'), parse(example, '', '', '2026-08-31T16:00:00Z'), parse(example, '', 'https://oier.baoshuo.dev/oier/4567')];
-    }, oierExample);
-    assert.deepEqual(parsed.slice(0, 3).map(data => data.profile.grade), [2028, 2027, 2028]); assert.equal(parsed[0].profile.oierId, undefined); assert.equal(parsed[0].profile.oierRank, 1); assert.equal(parsed[3].profile.oierId, 4567);
-    await openEditor(f, 7); await f.page.locator('[name="oierURL"]').fill('https://oier.baoshuo.dev/oier/4567'); await clipboardPaste(f, oierExample); assert.equal(await f.page.locator('[name="oierId"]').inputValue(), '4567'); await f.done();
+  await check('oier: bulk refresh shares one download and keeps missing, unbound and unrelated local data', async () => {
+    const users = structuredClone(userSample); users.oiers[9] = { name: '同绑定', uname: 'nine', oierId: 1234 }; users.oiers[11] = { name: '另一人', uname: 'eleven', oierId: 2345 }; users.oiers[13] = { name: '保留', uname: 'missing', oierId: 999999 };
+    const f = await fixture('homepage', '', {}, { storage: userStorage({}, users), remote: oierRemotes() }); await openWork(f, 'user-open');
+    const before = await f.page.evaluate(() => window.UiContext.exhloj.user.getData().users);
+    assert.match(await f.page.locator('#exhloj-user-oier-bindings').textContent(), /4 人已绑定/);
+    await f.page.locator('[data-exh-action="user-oier-refresh-all"]').click(); await finished(f, 'oier'); const saved = await savedOIer(f);
+    assert.equal(saved.oiers[7].name, '王茂骅'); assert.equal(saved.oiers[9].name, '王茂骅'); assert.equal(saved.oiers[9].uname, 'nine'); assert.equal(saved.oiers[11].name, '示例乙'); assert.equal(saved.oiers[11].oierRank, 2);
+    assert.deepEqual(saved.oiers[13], before.oiers[13]); assert.deepEqual(saved.oiers[8], before.oiers[8]); assert.deepEqual(saved.teachers, users.teachers); assert.deepEqual(saved.practice, users.practice);
+    assert.match(await f.page.locator('[data-work-progress="oier"]').textContent(), /3\/4/); assert.match(await f.page.locator('[data-work-errors="oier"]').textContent(), /999999/);
+    assert.equal((await gmRequests(f)).length, 4); await f.done();
   });
-  await check('oier: malformed paste is atomic, partial rows are reported and unrelated fields survive partial imports', async () => {
-    const f = await fixture('homepage', '', {}, { storage: userStorage() }); await openEditor(f, 7); const before = await f.page.locator('[name="name"]').inputValue();
-    await clipboardPaste(f, 'random text'); assert.match(await f.page.locator('#exhloj-user-oier-status').textContent(), /识别失败/); assert.equal(await f.page.locator('[name="name"]').inputValue(), before);
-    const partial = '新姓名\n选手信息\nCCF 程序设计能力等级：8 级。\n获奖信息\n|奖项|分数|选手排名|省份|就读学校|年级|\n|---|---|---|---|---|---|\n|CSP2025 提高 一等奖|399 / 400|1 / 100|浙江|本地学校|初三|\n|WC2025 金牌|bad / 300|1 / 100|浙江|本地学校|初三|';
-    await clipboardPaste(f, partial); assert.equal(await f.page.locator('[name="name"]').inputValue(), '新姓名'); assert.equal(await f.page.locator('[name="grade"]').inputValue(), '2029'); assert.equal(await f.page.locator('[name="oierId"]').inputValue(), '1234'); assert.equal(JSON.parse(await f.page.locator('[name="awards"]').inputValue()).length, 1); assert.match(await f.page.locator('#exhloj-user-oier-status').textContent(), /1 行获奖信息未能识别/);
-    await f.page.locator('[name="oierURL"]').fill('https://example.test/oier/9'); await clipboardPaste(f, oierExample); assert.match(await f.page.locator('#exhloj-user-oier-status').textContent(), /识别失败/); assert.equal(await f.page.locator('[name="name"]').inputValue(), '新姓名'); assert.equal(f.requests.length, 1); await f.done();
+  await check('oier: unchanged database versions recheck metadata and reuse data files', async () => {
+    const f = await fixture('homepage', '', {}, { storage: userStorage(), remote: oierRemotes() }); await openWork(f, 'user-open');
+    for (let i = 0; i < 2; i++) { await f.page.locator('[data-exh-action="user-oier-refresh-all"]').click(); await finished(f, 'oier'); }
+    const requests = await gmRequests(f); assert.equal(requests.length, 6); assert.equal(requests.filter(r => new URL(r.url).pathname.endsWith('.info.json')).length, 4);
+    assert.equal(requests.filter(r => new URL(r.url).pathname.startsWith('/result.') && !new URL(r.url).pathname.endsWith('.info.json')).length, 1);
+    assert.equal((await savedOIer(f)).oiers[7].records.length, 24); await f.done();
+  });
+  await check('oier: refresh preserves edits made while downloading and skips a changed person binding', async () => {
+    const users = structuredClone(userSample); users.oiers[8].oierId = 2345;
+    const remote = oierRemotes(); for (const [key, value] of Object.entries(remote)) if (/\/static\.[a-f\d]{7}\.json$/.test(key)) value.delay = 500;
+    const f = await fixture('homepage', '', {}, { storage: userStorage({}, users), remote }); await openWork(f, 'user-open');
+    await f.page.locator('[data-exh-action="user-oier-refresh-all"]').click(); await f.page.waitForFunction(() => window.__gm.length === 3);
+    await f.page.evaluate(() => {
+      const raw = window.__store['exhloj.coreui.cache.v1'], cache = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      Object.assign(cache['exhloj.user'].oiers[7], { name: '手动修改', oierId: 7777, uname: 'edited-uname' });
+      cache['exhloj.user'].practice[7] = 999; cache['exhloj.ratedcontests'].commands = '# edited while downloading';
+      window.__store['exhloj.coreui.cache.v1'] = JSON.stringify(cache);
+    }); await finished(f, 'oier');
+    const saved = await savedOIer(f); assert.equal(saved.oiers[7].name, '手动修改'); assert.equal(saved.oiers[7].oierId, 7777); assert.equal(saved.oiers[7].uname, 'edited-uname'); assert.equal(saved.practice[7], 999); assert.equal(saved.oiers[8].name, '示例乙');
+    assert.equal(await f.page.evaluate(() => JSON.parse(window.__store['exhloj.coreui.cache.v1'])['exhloj.ratedcontests'].commands), '# edited while downloading');
+    assert.match(await f.page.locator('[data-work-errors="oier"]').textContent(), /绑定已变化/); await f.done();
+  });
+  await check('oier: HTTP, redirect, malformed, corrupt and incomplete downloads preserve old data and remain retryable', async () => {
+    for (const mode of ['http', 'redirect', 'metadata', 'hash', 'truncated', 'schema']) {
+      const remote = oierRemotes(), infoKey = OIER_TEST_API + '/static.info.json', resultKey = Object.keys(remote).find(key => /\/result\.[a-f\d]{7}\.txt$/.test(key));
+      if (mode === 'http') remote[infoKey].status = 503;
+      if (mode === 'redirect') remote[infoKey].finalUrl = 'https://example.test/data';
+      if (mode === 'metadata') remote[infoKey].text = '{"sha512":"../bad","size":1}';
+      if (mode === 'hash') remote[resultKey].text = remote[resultKey].text.replace('200000', '200001');
+      if (mode === 'truncated') remote[resultKey].text = remote[resultKey].text.slice(0, -5);
+      if (mode === 'schema') Object.assign(remote, oierRemotes(oierStatic, 'invalid,data\n'));
+      const f = await fixture('homepage', '', {}, { storage: userStorage(), remote }); await openWork(f, 'user-open'); const before = await savedOIer(f);
+      await f.page.locator('[data-exh-action="user-oier-refresh-all"]').click(); await finished(f, 'oier'); assert.deepEqual(await savedOIer(f), before);
+      assert.match(await f.page.locator('[data-work-progress="oier"]').textContent(), /未完成/);
+      await f.page.evaluate(remote => { window.__remote = remote; }, oierRemotes()); await f.page.locator('[data-exh-action="user-oier-refresh-all"]').click(); await finished(f, 'oier');
+      assert.equal((await savedOIer(f)).oiers[7].name, '王茂骅'); await f.done();
+    }
+  });
+  await check('oier: cancellation aborts the download and a changed editor link cannot receive stale data', async () => {
+    const remote = oierRemotes(); for (const [key, value] of Object.entries(remote)) if (/\/static\.[a-f\d]{7}\.json$/.test(key)) value.delay = 500;
+    const f = await fixture('homepage', '', {}, { storage: userStorage(), remote }); await openEditor(f, 7); const before = await savedOIer(f);
+    await f.page.locator('[data-exh-action="user-oier-import"]').click(); await f.page.waitForFunction(() => window.__gm.length === 3);
+    await f.page.locator('[data-exh-action="work-cancel"][data-kind="oier"]').click(); await finished(f, 'oier'); assert.deepEqual(await savedOIer(f), before);
+    assert.equal(await f.page.locator('[name="name"]').inputValue(), '七号'); assert.equal((await gmRequests(f)).length, 3);
+    await f.page.locator('[data-exh-action="user-oier-import"]').click(); await f.page.waitForFunction(() => window.__gm.length === 6);
+    await f.page.locator('[name="oierURL"]').fill('https://oier.baoshuo.dev/oier/2345'); await finished(f, 'oier');
+    assert.equal(await f.page.locator('[name="name"]').inputValue(), '七号'); assert.deepEqual(await savedOIer(f), before); assert.match(await f.page.locator('#exhloj-user-oier-status').textContent(), /已变化/); await f.done();
+  });
+  await check('oier: disabling the user module cancels public-data reads without saving profiles', async () => {
+    const remote = oierRemotes(); for (const value of Object.values(remote)) value.delay = 500;
+    const f = await fixture('homepage', '', {}, { storage: userStorage(), remote }); await openEditor(f, 7); const before = await savedOIer(f);
+    await f.page.locator('[data-exh-action="user-oier-import"]').click(); await f.page.waitForFunction(() => window.__gm.length === 1);
+    await f.page.locator('[data-exh-action="close"]').click(); await f.page.locator('[data-exh-fallback]').click(); await f.page.locator('[name="userModule"]').uncheck(); await f.page.locator('[data-exh-action="save-settings"]').click();
+    await f.page.waitForTimeout(600); assert.deepEqual(await savedOIer(f), before); assert.equal((await gmRequests(f)).length, 1); await f.done();
+  });
+  await check('oier: zero-based contest and school IDs, missing scores, grade overrides and empty records match the database', async () => {
+    const f = await fixture('homepage', '', {}, { storage: userStorage(), remote: oierRemotes() }); await openEditor(f, 7);
+    // The matched NFLS site also runs on HTTP, where Web Crypto may be unavailable.
+    await f.page.evaluate(() => Object.defineProperty(window.crypto, 'subtle', { value: undefined }));
+    for (const [id, grade, score] of [[5001, '高三', 90], [2345, '高一', 80], [5002, '高二', '']]) {
+      await importOIer(f, id); const record = JSON.parse(await f.page.locator('[name="awards"]').inputValue())[0]; assert.equal(record.contestId, 0); assert.equal(record.schoolId, 0); assert.equal(record.participants, 3); assert.equal(record.score, score); assert.equal(record.grade, grade);
+    }
+    await importOIer(f, 7777); assert.equal(await f.page.locator('[name="level"]').inputValue(), '0'); assert.equal(await f.page.locator('[name="grade"]').inputValue(), '0'); assert.deepEqual(JSON.parse(await f.page.locator('[name="awards"]').inputValue()), []);
+    await f.page.locator('[data-exh-action="user-save"]').click(); assert.equal((await savedOIer(f)).oiers[7].oierId, 7777); await f.done();
+  });
+  await check('oier: database text is rendered literally and selected profile refresh works outside the editor', async () => {
+    const unsafe = oierResult.replace('WMH,王茂骅', 'WMH,<img src=x onerror=window.injected=1>');
+    const f = await fixture('user_detail', '', { udoc: { _id: 7, perm: 'BigInt::1' } }, { path: '/user/7', storage: userStorage(), remote: oierRemotes(oierStatic, unsafe) });
+    await f.page.locator('#exhloj-local-user-card [data-exh-action="user-oier-refresh"]').click(); await finished(f, 'oier');
+    assert.equal((await savedOIer(f)).oiers[7].name, '<img src=x onerror=window.injected=1>'); assert.equal(await f.page.locator('#exhloj-local-user-card img, #exhloj-local-user-card script').count(), 0); assert.equal(await f.page.evaluate(() => window.injected), undefined);
+    assert.equal(f.requests.length, 1); await f.done();
   });
   fs.writeFileSync('tests/output/browser-results.json', JSON.stringify({ version: require('../package.json').version, scriptSha256: crypto.createHash('sha256').update(script).digest('hex'), browser: browser.version(), passed: checks.length, checks }, null, 2));
   console.log(`All ${checks.length} browser scenarios passed.`);

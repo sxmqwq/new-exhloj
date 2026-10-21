@@ -11,7 +11,7 @@
 | `scripts/build.cjs` | 把渲染器和第三方许可证插入源码模板，检查版本一致性 |
 | `scripts/build-vendor.mjs` | 通过 esbuild 重建渲染器 |
 | `scripts/package-release.py` | 生成用户安装 ZIP、版本说明与 SHA-256 |
-| `tests/browser.cjs` | 61 组 Chromium 场景，接口由固定响应模拟 |
+| `tests/browser.cjs` | 67 组 Chromium 场景，接口由固定响应模拟 |
 | `tests/fixtures/` | 测试输入，不包含真实账号会话 |
 | `tests/output/` | 测试生成的 JSON/ZIP；不纳入版本控制 |
 | `release/` | 可上传到 GitHub Release 的安装包 |
@@ -28,7 +28,8 @@
 - `exportContestStatements`、`collectContestRecords`：比赛导出。
 - `scanJuan`：卷王统计与快照。
 - `userStore`、`writeUserStore`：本地用户数据及 Rating。
-- `parseOIerPaste`、`fillUserFromOIer`：OIerDb 粘贴识别和表单预览。
+- `loadOIerDatabase`、`readOIerProfiles`：读取 OIerDb 官方版本化静态数据，按 UID 解析选手与获奖记录。
+- `fillUserFromOIerLink`、`refreshOIerUsers`：链接预览与保存、单人/批量刷新；使用任务取消与账号检查，提交前重读本地资料并检查绑定。
 - `profilePanelTarget`：定位主页最外层侧栏。
 - `calculateUserRatings`：本地比赛结算。
 - 最后的点击事件委托和 `refresh`：界面动作与动态页面刷新。
@@ -59,3 +60,5 @@ EXHLOJ_TEST_FILTER='oier:' npm test
 `exhloj.coreui.*` 是旧版保留的内部存储键，不是当前插件名称。不要在没有迁移逻辑的情况下重命名这些键，否则用户已有设置和资料会丢失。
 
 本地资料编辑和 Rating 不设置固定 UID 的管理员门槛；需要读取 OJ 数据的操作仍遵循站点权限。不要将本地显示标记当作站点角色。
+
+OIerDb 数据来自 https://oier.api.baoshuo.dev ，只在手动读取/刷新时访问。按官方 SHA-512 版本名缓存当前页面数据，始终校验长度和结构；Web Crypto 可用时同时校验 SHA-512。HTTP 站点缺少 Web Crypto 时仍可读取。仅选手字段入本地存储，不保存完整数据库。OIerDb 的比赛/学校 ID 从 0 开始，选手 UID 从 1 开始。

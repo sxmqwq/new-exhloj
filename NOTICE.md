@@ -16,8 +16,11 @@
 
 这些第三方代码的版权和许可证随 `THIRD_PARTY_NOTICES.txt` 提供，并嵌入发布脚本。该文件不替代各组件原有的署名和授权。
 
-参考页面布局和粘贴格式时核对了以下项目源码：
+参考页面布局和 OIerDb 数据格式时核对了以下项目源码：
 
 - [Hydro 的用户主页模板](https://github.com/hydro-dev/Hydro/blob/master/packages/ui-default/templates/user_detail.html)
 - [OIerDb 的选手信息组件](https://github.com/OIerDb-ng/OIerDb/blob/master/apps/frontend-legacy/src/components/PersonInfo.tsx)
 - [OIerDb 的年级换算](https://github.com/OIerDb-ng/OIerDb/blob/master/apps/frontend-legacy/src/utils/getGrade.ts)
+
+- [OIerDb 官方数据读取](https://github.com/OIerDb-ng/OIerDb/blob/master/apps/frontend-legacy/src/libs/OIerDb.ts)
+- [OIerDb 压缩数据格式](https://github.com/OIerDb-ng/OIerDb/blob/master/packages/parser/result.ts)

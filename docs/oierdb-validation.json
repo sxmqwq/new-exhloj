@@ -1,0 +1,17 @@
+{
+  "checkedAt": "2026-10-21",
+  "method": "Official HTTPS data downloaded, SHA-512 checked, then parsed through the userscript in Chromium; no OJ account required.",
+  "source": "https://oier.api.baoshuo.dev",
+  "static": {
+    "sha512": "acb1ecaa330d3a7adb46f85106e38f0c18f9fd69c193091bdc23c7c9a61e20af7414894918c1c4cf0a5e2456e7f27585c51fcddf4968e172885d3e935694509e",
+    "size": 791756
+  },
+  "result": {
+    "sha512": "9d0b77880d15acf5115089ea10ba5ba23abda722aeb6302b60f11e7c8065ce91acad6cdd870e7368a4cdc356e30de281876b97c7f63ea13a4b3901db75d659bf",
+    "size": 11033092
+  },
+  "indexedPeople": 125953,
+  "importedAwards": 24,
+  "requests": 4,
+  "passed": true
+}
