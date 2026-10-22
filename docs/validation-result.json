@@ -1,8 +1,8 @@
 {
-  "version": "2.4.0",
-  "scriptSha256": "a7f0c932671f1ef21439d21f1e7f3a2830f725c514d38ee25b81ef48de108fb6",
+  "version": "2.5.1",
+  "scriptSha256": "ad35dcd4936bea3d6a5340ea5c9254251b77dfa1cd8337730f5eefe4dc53ef3b",
   "browser": "153.0.8010.0",
-  "passed": 67,
+  "passed": 84,
   "checks": [
     "core: guest fallback, lazy user menu, deduplication, no automatic writes/requests",
     "core: save UI switch and preserve ports across reinstall/page load",
@@ -70,6 +70,23 @@
     "oier: cancellation aborts the download and a changed editor link cannot receive stale data",
     "oier: disabling the user module cancels public-data reads without saving profiles",
     "oier: zero-based contest and school IDs, missing scores, grade overrides and empty records match the database",
-    "oier: database text is rendered literally and selected profile refresh works outside the editor"
+    "oier: database text is rendered literally and selected profile refresh works outside the editor",
+    "oier: quick scans all ranking pages, deduplicates visible users, previews only and confirms one",
+    "oier: quick normalizes tone marks, umlauts, case, full pinyin fragments and initials",
+    "oier: quick queues duplicate names and conflicting fragments with at most three candidates for review",
+    "oier: quick skips existing bindings without downloading a database and excludes unrelated context users",
+    "oier: quick rescans reuse versioned files, and removing candidates never saves profiles",
+    "oier: quick incomplete ranking scans publish no candidates and do not download data",
+    "oier: quick cancellation during download leaves storage and queue untouched",
+    "oier: quick preserves changed local profiles and unrelated data when confirming a batch",
+    "oier: quick rejects confirmations after account or route changes",
+    "oier: quick paginates candidates and preserves selections across pages without auto-saving",
+    "oier: quick renders usernames literally and supports a chosen domain with no background scans",
+    "oier: quick small candidate groups recognize numeric full-pinyin examples and preserve all matches",
+    "oier: quick small candidate groups require choosing one profile and save exactly that choice",
+    "oier: quick small candidate groups cannot be guessed by bulk confirmation",
+    "oier: quick full pinyin verifies whole name readings instead of unrelated shared initials",
+    "oier: quick full pinyin supports polyphonic characters without relying on one initials spelling",
+    "oier: quick small candidate choice and expansion survive pagination and fit the dialog"
   ]
 }

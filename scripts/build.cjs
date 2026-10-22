@@ -10,7 +10,8 @@ const replaceOnce = (text, token, content) => {
   return text.replace(token, () => content);
 };
 source = replaceOnce(source, '/* @EXHLOJ_MARKDOWN_VENDOR@ */', vendor);
-source = replaceOnce(source, '/* @EXHLOJ_THIRD_PARTY_LICENSES@ */', `/* THIRD-PARTY LICENSE NOTICES\n${notices}\n*/\n`);
+source = replaceOnce(source, '/* @EXHLOJ_PINYIN_VENDOR@ */', read('vendor/pinyin.js').trimEnd());
+source = replaceOnce(source, '/* @EXHLOJ_THIRD_PARTY_LICENSES@ */', `/* THIRD-PARTY LICENSE NOTICES\n${notices}\n\n*/\n`);
 const version = require('../package.json').version;
 if (!source.includes(`// @version      ${version}\n`) || !source.includes(`const VERSION = '${version}';`)) throw new Error('package.json and userscript versions differ');
 const output = path.join(root, 'dist/exhloj.user.js');

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Extend HLOJ
 // @namespace    exhloj-local
-// @version      2.4.0
+// @version      2.5.1
 // @description  core/ui/captcha/remote-problem/contest-helper/juan-monitor/user；本地重制，无旧后端依赖。
 // @author       Extend HLOJ Dev Team (original); Local restoration
 // @match        *://oj.hailiangedu.com/*
@@ -35,7 +35,7 @@
  *       验证码识别不联网、不自动提交登录；不访问原插件后端。
  *       user 按需 GET 榜单、用户名或 OIerDb 官方公开数据；资料编辑与 Rating 结算只保存到本地，无指定 UID 的管理员限制。
  * 缓存使用明文 JSON。旧版 AES 密文不在本版导入范围内；不读取旧 token/密码。
- * 此文件按原 1.16.1 的功能重制，内嵌 marked / DOMPurify / KaTeX 及 marked-katex-extension（第三方许可证随 ZIP 提供）；
+ * 此文件按原 1.16.1 的功能重制，内嵌 marked / DOMPurify / KaTeX / marked-katex-extension 和离线拼音字典 pinyin-pro（第三方许可证随 ZIP 提供）；
  * 无远程依赖和远程更新地址。升级建议在油猴编辑器中替换现有脚本全文，以保留存储。
  * 若作为新脚本安装，请停用旧版，并按需导入之前的 JSON 备份。
  */
@@ -47,9 +47,9 @@
   if (!(location.hostname === 'oj.hailiangedu.com' ||
       location.host === 'www.nfls.com.cn:10611' || /(^|\.)oifha\.com$/.test(location.hostname))) return;
   if (document.documentElement.dataset.exhlojCoreUi) return;
-  document.documentElement.dataset.exhlojCoreUi = '2.4.0';
+  document.documentElement.dataset.exhlojCoreUi = '2.5.1';
 
-  const VERSION = '2.4.0';
+  const VERSION = '2.5.1';
   const SETTINGS_KEY = 'exhloj.coreui.settings.v1';
   const CACHE_KEY = 'exhloj.coreui.cache.v1';
   const CAPTCHA_KEY = 'exhloj.local.captcha.history';
@@ -213,6 +213,7 @@
     .exhloj-remote-article pre{overflow:auto;white-space:pre}.exhloj-remote-article img{max-width:100%}
     .exhloj-work-progress{padding:8px 12px;background:#eef5fb;border-radius:6px;white-space:pre-wrap;overflow-wrap:anywhere}
     .exhloj-work-results{overflow:auto;max-height:45vh}.exhloj-work-results table{min-width:500px}
+    .exhloj-oier-option{padding:8px 0;border-bottom:1px solid #ddd}.exhloj-oier-option p{margin:3px 0}
     .exhloj-work-errors{color:#9a3939;white-space:pre-wrap;max-height:150px;overflow:auto}
     #exhloj-local-dialog .exhloj-remote-article textarea{height:180px}
     #exhloj-local-dialog input[type=text],#exhloj-local-dialog select{box-sizing:border-box;max-width:100%;padding:5px 8px;border:1px solid #b5bfca;background:#fff;color:#263445}
@@ -786,6 +787,7 @@
 
   // remote-problem: 站内配置 / 本地映射 + 原站读取，不依赖共享插件服务器。
 /* @EXHLOJ_MARKDOWN_VENDOR@ */
+/* @EXHLOJ_PINYIN_VENDOR@ */
 
   const REMOTE_KEY = 'exhloj.local.remote.cache';
   const CF_KEY = 'exhloj.local.cf.ratings';
@@ -1259,7 +1261,7 @@
       const signature = JSON.stringify(rows.map(row => String(row._id ?? row.docId ?? `${row.uid}/${row.pid}`)));
       if (signatures.has(signature)) throw workError('分页重复，已停止扫描；结果不完整');
       signatures.add(signature); result.push(...rows);
-      const pages = Number(body.pageCount ?? body.totalPages ?? body.rpages ?? body.tpages);
+      const pages = Number(body.pageCount ?? body.totalPages ?? body.rpages ?? body.tpages ?? body.upcount ?? body.data?.upcount);
       if (pages > 0 && number >= pages) return result;
       if (number === settings.helperPageLimit) throw Object.assign(workError(`达到 ${number} 页上限；结果不完整`), { rows: result });
     } } catch (error) { error.rows ||= result; throw error; }
@@ -1832,7 +1834,7 @@
     const uidLabel = el('label', {}, '编辑用户 ID '); uidLabel.append(el('input', { type: 'number', min: 1, step: 1, id: 'exhloj-user-id', value: userProfileId() || +user()._id || 1 })); body.append(uidLabel, button('编辑资料', 'user-edit'), button('查看 Rating 历史', 'user-history'));
     body.append(button('Rating 排行榜', 'user-ranking'), button('Rated 比赛与结算', 'user-rated'), button('资料 JSON 导入 / 编辑', 'user-json'), button('导出用户数据', 'user-export'), button('从卷王统计更新题目分', 'user-practice'));
     const bindings = el('details', { open: '' }); bindings.append(el('summary', {}, '已绑定的 OIerDb 资料'), el('div', { id: 'exhloj-user-oier-bindings', class: 'exhloj-work-results' }), button('刷新全部 OIerDb 资料', 'user-oier-refresh-all'));
-    body.append(bindings); workProgress(body, 'oier'); renderOIerBindings();
+    body.append(button('OIerDb 快捷导入', 'user-oier-quick-open'), bindings); workProgress(body, 'oier'); renderOIerBindings();
   }
   const OIER_API = 'https://oier.api.baoshuo.dev';
   const OIER_AWARDS = ['金牌', '银牌', '铜牌', '一等奖', '二等奖', '三等奖', '国际金牌', '国际银牌', '国际铜牌', '前5%', '前15%', '前25%'];
@@ -1950,6 +1952,204 @@
       normalizeUserData({ oiers: { 1: profile } }); result.set(id, profile);
     }
     return result;
+  }
+  // 快捷导入：只对已同意关联的成员使用；识别与候选队列只在当前页面内存中保留。
+  let oierQuickQueue;
+  function normalizeOIerLetters(text) {
+    return text.normalize('NFKC').replace(/[üǖǘǚǜ]/gi, 'v').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+  }
+  function oierNamePinyins(name, readings) {
+    const chars = [...name.replace(/·/g, '')];
+    if (chars.length < 2 || chars.length > 12 || chars.some(char => !/^\p{Script=Han}$/u.test(char))) return [];
+    let variants = [''];
+    for (const char of chars) {
+      if (!readings.has(char)) {
+        const choices = ExhlojPinyin.polyphonic(char, { type: 'array', toneType: 'none', v: true })[0] || [];
+        readings.set(char, [...new Set(choices.map(normalizeOIerLetters).filter(value => /^[a-z]+$/.test(value)))]);
+      }
+      const choices = readings.get(char);
+      if (!choices.length || variants.length * choices.length > 256) return [];
+      variants = [...new Set(variants.flatMap(prefix => choices.map(value => prefix + value)))];
+    }
+    return variants;
+  }
+  async function indexOIerSearch(database, job) {
+    if (database.searchIndex) return database.searchIndex;
+    const names = new Map(), initials = new Map(), fullPinyin = new Map(), lengths = new Set(); let offset = 0, count = 0;
+    const add = (map, key, ids) => { const values = map.get(key) || []; values.push(...ids); map.set(key, values); };
+    const seen = new Set();
+    while (offset < database.results.length) {
+      const end = database.results.indexOf('\n', offset), line = database.results.slice(offset, end < 0 ? undefined : end).replace(/\r$/, '');
+      offset = end < 0 ? database.results.length : end + 1; if (!line) continue;
+      const fields = line.split(','), id = +fields[0];
+      if (fields.length !== 9 || !Number.isSafeInteger(id) || id <= 0 || !fields[2] || seen.has(id)) throw workError('OIerDb 搜索索引无效或选手 ID 重复');
+      seen.add(id); add(names, fields[2].normalize('NFKC').toLowerCase(), [id]);
+      const key = fields[1].toLowerCase(); if (/^[a-z]{2,8}$/.test(key)) add(initials, key, [id]);
+      if (++count % 2000 === 0) {
+        checkJob(job); workStates.oier.message = `建立本地搜索索引 · ${count} 人`; updateWorkProgress('oier'); await pauseWork(0, job.controller.signal);
+      }
+    }
+    const readings = new Map(); let indexed = 0;
+    for (const [name, ids] of names) {
+      for (const key of oierNamePinyins(name, readings)) { add(fullPinyin, key, ids); lengths.add(key.length); }
+      if (++indexed % 1000 === 0) {
+        checkJob(job); workStates.oier.message = `建立本地全拼索引 · ${indexed}/${names.size} 个姓名`; updateWorkProgress('oier'); await pauseWork(0, job.controller.signal);
+      }
+    }
+    checkJob(job); return database.searchIndex = { names, initials, fullPinyin, lengths: [...lengths].sort((a, b) => b - a), count };
+  }
+  function matchOIerUser(uname, index) {
+    const han = [...uname.normalize('NFKC').matchAll(/\p{Script=Han}/gu)].map(match => match[0]).join('');
+    if (han && index.names.has(han)) return { ids: new Set(index.names.get(han)), evidence: [`汉字：${han}`] };
+    const text = normalizeOIerLetters(uname.normalize('NFKC').replace(/([a-z])([A-Z])/g, '$1_$2'));
+    const full = [], initials = [];
+    for (const group of text.matchAll(/[a-z]+(?:[\s_.'’-]+[a-z]+)*/g)) {
+      const compact = group[0].replace(/[^a-z]/g, ''), groupId = group.index;
+      let partOffset = 0;
+      for (const part of group[0].matchAll(/[a-z]+/g)) {
+        const key = part[0], ids = index.initials.get(key);
+        if (ids) initials.push({ groupId, start: partOffset, end: partOffset + key.length, ids, evidence: `首字母：${key}` });
+        partOffset += key.length;
+      }
+      // 数字分隔两侧分别识别；字母前后缀内也可命中完整姓名全拼，不把数字两侧拼成一个姓名。
+      for (let start = 0; start < compact.length; start++) for (const length of index.lengths) {
+        if (start + length > compact.length) continue;
+        const key = compact.slice(start, start + length), ids = index.fullPinyin.get(key);
+        if (ids) full.push({ groupId, start, end: start + length, ids, evidence: `全拼：${key}（完整姓名读音）` });
+      }
+    }
+    // 优先完整姓名全拼；同一片段里的短姓名不会覆盖较长姓名，等长/分离片段的多候选交给用户选择。
+    const signals = full.length ? full : initials;
+    const maximal = signals.filter(a => !signals.some(b => a.groupId === b.groupId && b.start <= a.start && b.end >= a.end && b.end - b.start > a.end - a.start));
+    return { ids: new Set(maximal.flatMap(signal => signal.ids)), evidence: [...new Set(maximal.map(signal => signal.evidence))] };
+  }
+  function quickOIerContext(queue = oierQuickQueue) {
+    if (!queue || queue.owner !== +user()._id || queue.epoch !== routeEpoch || queue.routeDomain !== domainId()) throw workError('账号或页面已变化，请重新扫描排名页');
+    return queue;
+  }
+  function openQuickOIerImport() {
+    const body = userToolBody('OIerDb 快捷导入'), form = el('form', { id: 'exhloj-oier-quick-form' }), label = el('label', {}, '排名页所在域 ID ');
+    label.append(el('input', { name: 'domain', type: 'text', value: domainId(), maxlength: 80 })); form.append(label);
+    form.append(el('p', {}, '用于已同意关联的成员。扫描排名页可见用户，汉字按完整姓名搜索；全拼/字母子串核对完整姓名读音，支持数字前后缀。命中 1–3 人进入折叠候选组，选择并确认后才保存。已绑定用户自动跳过。'),
+      button('扫描排名页并识别', 'user-oier-quick-scan'));
+    body.append(form); workProgress(body, 'oier'); body.append(el('div', { id: 'exhloj-oier-quick-results', class: 'exhloj-work-results' }));
+    renderQuickOIerImport(); showWorkErrors(workStates.oier);
+  }
+  function renderQuickOIerImport() {
+    const box = $('#exhloj-oier-quick-results'); if (!box) return; box.replaceChildren();
+    const scan = $('[data-exh-action="user-oier-quick-scan"]'); if (scan) scan.disabled = !!workStates.oier.running;
+    if (!oierQuickQueue) { box.append(el('p', {}, '尚无候选。OIerDb 基础资料与获奖记录在整轮识别中各下载一次；同版本在当前页面继续复用。')); return; }
+    let queue; try { queue = quickOIerContext(); } catch (error) { box.append(el('p', {}, error.message)); return; }
+    const pending = queue.rows.filter(row => !row.done), size = 30, pages = Math.max(1, Math.ceil(pending.length / size)); queue.page = Math.min(queue.page, pages - 1);
+    box.append(el('p', { id: 'exhloj-oier-quick-summary' }, `域 ${queue.domain} · 排名页 ${queue.scanned} 人 · 待确认 ${pending.length} 人 · 已绑定跳过 ${queue.bound} 人 · 未入队 ${queue.unmatched.length} 人 · 数据版本 ${queue.version}`));
+    if (queue.message) box.append(el('p', { role: 'status' }, queue.message));
+    if (pending.length) {
+      box.append(button('选中本页', 'user-oier-quick-select', { 'data-selected': 'yes' }), button('取消本页选择', 'user-oier-quick-select', { 'data-selected': 'no' }),
+        button('确认导入选中项', 'user-oier-quick-apply'), button('移除选中项', 'user-oier-quick-remove'));
+      const table = el('table'), head = el('tr'); for (const title of ['选择', 'OJ 用户', '匹配依据', 'OIerDb 候选资料', '操作']) head.append(el('th', {}, title)); table.append(head);
+      for (const row of pending.slice(queue.page * size, (queue.page + 1) * size)) {
+        const tr = el('tr', { 'data-oier-candidate': row.uid }), choice = el('input', { type: 'checkbox', 'data-oier-choice': row.uid, 'aria-label': `选择 ${row.uname}` }); choice.checked = !!row.selected;
+        choice.addEventListener('change', () => { row.selected = choice.checked; });
+        const select = el('td'); select.append(choice);
+        const oj = el('td'); oj.append(el('a', { href: `/d/${seg(queue.domain)}/user/${row.uid}`, target: '_blank', rel: 'noopener noreferrer' }, `${row.uname} · #${row.uid}`));
+        const candidate = el('td'), details = el('details', { 'data-oier-options': row.uid }), summary = el('summary'); details.open = !!row.expanded;
+        const updateSummary = () => { const chosen = row.options.find(profile => profile.oierId === row.chosenId); summary.textContent = `${row.options.length} 位候选 · ${chosen ? '当前选择：' + chosen.name + ' #' + chosen.oierId : '展开选择一人'}`; };
+        updateSummary(); details.append(summary); details.addEventListener('toggle', () => { row.expanded = details.open; });
+        const confirm = button('确认此人', 'user-oier-quick-apply', { 'data-uid': row.uid }); confirm.disabled = !row.chosenId;
+        for (const profile of row.options) {
+          const card = el('div', { class: 'exhloj-oier-option', 'data-oier-profile': profile.oierId }), label = el('label'), radio = el('input', { type: 'radio', name: `oier-choice-${row.uid}`, value: profile.oierId, 'aria-label': `选择 ${profile.name} #${profile.oierId}` });
+          radio.checked = row.chosenId === profile.oierId; label.append(radio, `${profile.name} · #${profile.oierId}`); card.append(label);
+          radio.addEventListener('change', () => {
+            if (!radio.checked) return; row.chosenId = profile.oierId; row.selected = true; choice.checked = true; confirm.disabled = false; updateSummary();
+          });
+          const latest = profile.records.at(0);
+          card.append(el('a', { href: `https://oier.baoshuo.dev/oier/${profile.oierId}`, target: '_blank', rel: 'noopener noreferrer' }, '查看 OIerDb 选手页'),
+            el('p', {}, `CCF ${profile.level} 级 · ${profile.grade ? profile.grade + ' 年高中毕业' : '年级未知'} · ${profile.records.length} 条获奖记录`),
+            el('p', {}, latest ? `${latest.school} · ${latest.province} · ${latest.contest} ${latest.awards}` : '无获奖记录'));
+          if (queue.rows.some(other => other.uid !== row.uid && other.options.some(option => option.oierId === profile.oierId))) card.append(el('p', {}, '同一 OIerDb ID 也匹配了其他账号，请分别核对。'));
+          details.append(card);
+        }
+        candidate.append(details); const actions = el('td'); actions.append(confirm, button('移除', 'user-oier-quick-remove', { 'data-uid': row.uid }));
+        tr.append(select, oj, el('td', {}, row.evidence.join('\n')), candidate, actions); table.append(tr);
+      }
+      box.append(table, button('上一页', 'user-oier-quick-page', { 'data-step': '-1', ...(queue.page === 0 ? { disabled: '' } : {}) }),
+        el('span', {}, ` 第 ${queue.page + 1}/${pages} 页 `), button('下一页', 'user-oier-quick-page', { 'data-step': '1', ...(queue.page + 1 >= pages ? { disabled: '' } : {}) }));
+    }
+    if (queue.unmatched.length) {
+      const details = el('details'); details.append(el('summary', {}, `未入队 ${queue.unmatched.length} 人（超过 3 人或无匹配）`));
+      for (const row of queue.unmatched.slice(0, 100)) details.append(el('p', {}, `${row.uname} · #${row.uid}：${row.reason}${row.evidence?.length ? '；' + row.evidence.join('；') : ''}`));
+      if (queue.unmatched.length > 100) details.append(el('p', {}, '这里只展示前 100 人。')); box.append(details);
+    }
+  }
+  async function scanQuickOIerImport() {
+    const form = $('#exhloj-oier-quick-form'), domains = domainList(form.elements.domain.value); if (domains.length !== 1) throw workError('一次请选择一个排名域');
+    if (workJobs.has('oier')) throw workError('OIerDb 已有任务运行，请等待或取消');
+    oierQuickQueue = undefined; renderQuickOIerImport();
+    await runWork('oier', async (job, state) => {
+      const queue = { owner: job.owner, epoch: routeEpoch, routeDomain: domainId(), domain: domains[0], rows: [], unmatched: [], bound: 0, scanned: 0, page: 0 };
+      job.quick = true; renderQuickOIerImport();
+      const rows = await listPages(job, `/d/${seg(queue.domain)}/ranking`, 'udocs'), members = new Map(), store = userStore();
+      quickOIerContext(queue);
+      for (const row of rows) {
+        const uid = Number(row._id ?? row.uid);
+        if (!Number.isSafeInteger(uid) || uid <= 1 || typeof row.uname !== 'string' || !row.uname.trim() || row.uname.length > 120 || row.deleted === true) continue;
+        if (members.has(uid) && members.get(uid).uname !== row.uname) throw workError('排名页用户名在扫描中变化，请重新扫描');
+        members.set(uid, { uid, uname: row.uname });
+      }
+      queue.scanned = members.size;
+      const unbound = [];
+      for (const row of members.values()) {
+        if (store.users.oiers[row.uid]?.oierId) { queue.bound++; continue; }
+        unbound.push({ ...row, baseline: JSON.stringify(store.users.oiers[row.uid] ?? null) });
+      }
+      if (!unbound.length) {
+        checkJob(job); quickOIerContext(queue); queue.version = '无需下载'; oierQuickQueue = queue; state.message = `已扫描 ${queue.scanned} 人，没有未绑定成员`; return;
+      }
+      const database = await loadOIerDatabase(job), index = await indexOIerSearch(database, job), matched = [];
+      for (const [number, row] of unbound.entries()) {
+        let match; try { match = matchOIerUser(row.uname, index); } catch (error) { queue.unmatched.push({ ...row, reason: error.message }); continue; }
+        if (match.ids.size >= 1 && match.ids.size <= 3) matched.push({ ...row, ids: [...match.ids], evidence: match.evidence });
+        else queue.unmatched.push({ ...row, evidence: match.evidence, reason: match.ids.size ? `搜索命中 ${match.ids.size} 人，超过 3 人，未入队` : '未找到完整姓名、首字母或可匹配的全拼片段' });
+        if (number % 25 === 0) {
+          checkJob(job); quickOIerContext(queue); state.message = `本地识别 ${number + 1}/${unbound.length} 人`; updateWorkProgress('oier'); await pauseWork(0, job.controller.signal);
+        }
+      }
+      const profiles = matched.length ? await readOIerProfiles(database, matched.flatMap(row => row.ids), job) : new Map();
+      for (const row of matched) {
+        const options = row.ids.map(id => profiles.get(id)); if (options.some(profile => !profile)) throw workError('候选资料不完整，请重试');
+        queue.rows.push({ ...row, options, chosenId: options.length === 1 ? options[0].oierId : 0 });
+      }
+      checkJob(job); quickOIerContext(queue); queue.version = database.shortVersion; oierQuickQueue = queue;
+      state.message = `识别完成，${queue.rows.length} 人进入待确认队列；尚未保存任何资料`;
+    });
+    renderQuickOIerImport();
+  }
+  function applyQuickOIerImport(uid) {
+    if (workJobs.has('oier')) throw workError('请等待当前 OIerDb 任务结束');
+    const queue = quickOIerContext(), selected = queue.rows.filter(row => !row.done && (uid === undefined ? row.selected : row.uid === uid));
+    if (!selected.length) throw workError('请先勾选候选，或点击对应的“确认此人”');
+    const store = userStore(), next = clone(store.users), errors = []; let saved = 0; const accepted = [];
+    for (const row of selected) {
+      const profile = row.options.find(option => option.oierId === row.chosenId);
+      if (!profile) { errors.push(`#${row.uid} 有多个候选，请先展开并选择一人`); continue; }
+      if (JSON.stringify(next.oiers[row.uid] ?? null) !== row.baseline) { errors.push(`#${row.uid} 的本地资料已变化，请重新扫描`); continue; }
+      next.oiers[row.uid] = { ...next.oiers[row.uid], ...profile, uname: row.uname }; saved++; accepted.push(row);
+    }
+    if (saved) { writeUserStore(next, store.ratings); for (const row of accepted) row.done = true; }
+    queue.message = `已确认保存 ${saved} 人${errors.length ? '；' + errors.join('；') : ''}`; renderQuickOIerImport(); notify(queue.message, !saved);
+  }
+  function changeQuickOIerQueue(action, control) {
+    const queue = quickOIerContext();
+    if (action === 'user-oier-quick-page') queue.page = Math.max(0, queue.page + Number(control.dataset.step));
+    else {
+      const displayed = new Set($$('[data-oier-choice]').map(input => +input.dataset.oierChoice));
+      for (const row of queue.rows) {
+        if (row.done) continue;
+        if (action === 'user-oier-quick-select' && displayed.has(row.uid)) row.selected = control.dataset.selected === 'yes';
+        if (action === 'user-oier-quick-remove' && (control.dataset.uid ? row.uid === +control.dataset.uid : row.selected)) row.done = true;
+      }
+    }
+    renderQuickOIerImport();
   }
   function renderOIerBindings() {
     const box = $('#exhloj-user-oier-bindings'); if (!box) return;
@@ -2581,6 +2781,10 @@
         case 'user-history': openUserHistory(control.dataset.uid || $('#exhloj-user-id')?.value); break;
         case 'user-ranking': openUserRanking(control.dataset.mode || 'current'); break;
         case 'user-save': saveUserEditor(); break;
+        case 'user-oier-quick-open': openQuickOIerImport(); break;
+        case 'user-oier-quick-scan': await scanQuickOIerImport(); break;
+        case 'user-oier-quick-apply': applyQuickOIerImport(control.dataset.uid ? localUid(control.dataset.uid) : undefined); break;
+        case 'user-oier-quick-select': case 'user-oier-quick-remove': case 'user-oier-quick-page': changeQuickOIerQueue(action, control); break;
         case 'user-oier-import': await fillUserFromOIerLink($('#exhloj-user-editor')); break;
         case 'user-oier-refresh': await refreshOIerUsers(localUid(control.dataset.uid), control); break;
         case 'user-oier-refresh-all': await refreshOIerUsers(undefined, control); break;
@@ -2675,6 +2879,8 @@
   function refresh() {
     if (location.href !== route) {
       route = location.href; routeEpoch++; contextBody = {}; pageRequest = undefined;
+      if (workJobs.get('oier')?.quick) workJobs.get('oier').controller.abort();
+      oierQuickQueue = undefined;
       lastPageError = ''; homeworkStarted = recordStarted = solutionStarted = false;
       remoteState = undefined; remotePending = false; contestRevealed = false;
       lastEvents.delete('homework_detail.prepare'); lastEvents.delete('record_detail.prepare');

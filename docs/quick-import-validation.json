@@ -1,0 +1,33 @@
+{
+  "checkedAt": "2026-10-22",
+  "version": "2.5.1",
+  "quickBrowserScenarios": 17,
+  "totalBrowserScenarios": 84,
+  "indexValidation": {
+    "version": "2.5.1",
+    "people": 125953,
+    "names": 109399,
+    "initials": 8826,
+    "fullPinyinKeys": 112783,
+    "indexedMs": 1049,
+    "examples": [
+      {
+        "input": "zhanghaoxuan2024",
+        "extracted": [
+          "全拼：zhanghaoxuan（完整姓名读音）"
+        ],
+        "matchCount": 21
+      },
+      {
+        "input": "DL24zhangyixin",
+        "extracted": [
+          "全拼：zhangyixin（完整姓名读音）"
+        ],
+        "matchCount": 12
+      }
+    ]
+  },
+  "dataSnapshot": "Official compressed result downloaded and SHA-512 checked on 2026-10-21",
+  "batchRequests": "2 metadata checks + 1 static file + 1 result file; no runtime pinyin requests",
+  "testScope": "Synthetic OJ usernames only; no scan of actual OJ members"
+}

@@ -11,12 +11,12 @@
 | `scripts/build.cjs` | 把渲染器和第三方许可证插入源码模板，检查版本一致性 |
 | `scripts/build-vendor.mjs` | 通过 esbuild 重建渲染器 |
 | `scripts/package-release.py` | 生成用户安装 ZIP、版本说明与 SHA-256 |
-| `tests/browser.cjs` | 67 组 Chromium 场景，接口由固定响应模拟 |
+| `tests/browser.cjs` | 84 组 Chromium 场景，接口由固定响应模拟 |
 | `tests/fixtures/` | 测试输入，不包含真实账号会话 |
 | `tests/output/` | 测试生成的 JSON/ZIP；不纳入版本控制 |
 | `release/` | 可上传到 GitHub Release 的安装包 |
 
-源码仍使用一个 IIFE，共用内部工具和事件委托；这里没有引入新的模块运行机制。默认构建只替换两个明确的标记，不更改业务逻辑。初次整理后的 `dist/exhloj.user.js` 与已经交付的 2.3.1 完全一致；2.3.2 修复用户链接范围与 CCF SVG 徽章。
+源码仍使用一个 IIFE，共用内部工具和事件委托；这里没有引入新的模块运行机制。默认构建只替换三个明确的标记，不更改业务逻辑。初次整理后的 `dist/exhloj.user.js` 与已经交付的 2.3.1 完全一致；2.3.2 修复用户链接范围与 CCF SVG 徽章。
 
 ## 源码位置
 
@@ -62,3 +62,14 @@ EXHLOJ_TEST_FILTER='oier:' npm test
 本地资料编辑和 Rating 不设置固定 UID 的管理员门槛；需要读取 OJ 数据的操作仍遵循站点权限。不要将本地显示标记当作站点角色。
 
 OIerDb 数据来自 https://oier.api.baoshuo.dev ，只在手动读取/刷新时访问。按官方 SHA-512 版本名缓存当前页面数据，始终校验长度和结构；Web Crypto 可用时同时校验 SHA-512。HTTP 站点缺少 Web Crypto 时仍可读取。仅选手字段入本地存储，不保存完整数据库。OIerDb 的比赛/学校 ID 从 0 开始，选手 UID 从 1 开始。
+
+## 排名页快捷导入（2.5.0）
+
+- `indexOIerSearch`：按官方结果文件第 2 列首字母、第 3 列姓名构建当前页面索引，重复 ID 使任务失败。
+- `matchOIerUser`：汉字完整姓名优先；使用内嵌 pinyin-pro 的逐字读音建立全拼索引，完整姓名拼音/子串优先于首字母。名字 2～12 字、读音组合最多 256 个，异常组合用汉字、首字母或链接确认；保留同音重名和分离片段候选。
+- `scanQuickOIerImport`：通过 `/d/{domain}/ranking?page=N` 的 `udocs / upcount` 读取可见用户名；全轮仅调用一次数据库加载，选中资料只解析一次。
+- `applyQuickOIerImport`：内存候选按账号、页面版本及域上下文限制；提交前重读用户存储，比较被更新人的原资料快照，合并保存且保留其他数据。
+- 官方格式核对：OIerDb `apps/frontend-legacy/src/components/Search.tsx`、`packages/parser/result.ts`；Hydro `packages/hydrooj/src/handler/domain.ts`、`packages/ui-default/templates/ranking.html`（2026-10-22）。
+- 快捷导入测试：`EXHLOJ_TEST_FILTER='oier: quick' npm test`。所有批量匹配测试使用构造的虚构姓名及 UID；未扫描实际 OJ 成员。
+
+2.5.1：命中 1～3 个不同 ID 入队。`options / chosenId` 区分候选组与选择结果；多候选初始不选定，提交只允许保存所选候选。新增 `vendor/pinyin-entry.mjs`、`vendor/pinyin.js`，默认构建直接内嵌，运行时不请求字典。`build:vendor` 同时重建 Markdown 和拼音库。

@@ -477,7 +477,7 @@ async function check(name, work) {
   async function juanJSON(f) { return JSON.parse((await downloaded(f, 'juan-json')).toString()); }
 
   await check('work: branding, module switches, menu deduplication and default no background requests', async () => {
-    assert.match(script, /\/\/ @name\s+Extend HLOJ\n/); assert.match(script, /\/\/ @version\s+2\.4\.0/);
+    assert.match(script, /\/\/ @name\s+Extend HLOJ\n/); assert.match(script, /\/\/ @version\s+2\.5\.1/);
     const f = await fixture('contest_detail', '<ol id="menu-nav-user"></ol>', { tdoc }, { path: `/d/test/contest/${tid}`, storage: fast() });
     await f.page.waitForTimeout(500);
     assert.equal(f.requests.length, 1); assert.equal(await f.page.locator('[data-exh-work-menu]').count(), 3);
@@ -908,6 +908,189 @@ async function check(name, work) {
     await f.page.locator('#exhloj-local-user-card [data-exh-action="user-oier-refresh"]').click(); await finished(f, 'oier');
     assert.equal((await savedOIer(f)).oiers[7].name, '<img src=x onerror=window.injected=1>'); assert.equal(await f.page.locator('#exhloj-local-user-card img, #exhloj-local-user-card script').count(), 0); assert.equal(await f.page.evaluate(() => window.injected), undefined);
     assert.equal(f.requests.length, 1); await f.done();
+  });
+  const quickResult = [
+    '9101,CSN,陈思宁,0,2022,100,0,6,0:0:90:1:25:3',
+    '9102,ljh,李景和,0,2022,99,0,5,0:0:80:2:25:3',
+    '9103,ljh,林嘉禾,0,2022,98,0,4,0:0:70:3:25:4',
+    '9104,zyl,赵亦岚,0,2022,97,0,3,',
+    '9105,wmh,王木河,0,2022,96,0,3,',
+    '9106,ab,虚构同名,0,2022,95,0,3,',
+    '9107,cd,虚构同名,0,2022,94,0,3,',
+    '9108,an,安宁,0,2022,93,0,3,',
+    '9109,xm,先明,0,2022,92,0,3,',
+    '9110,xam,西安明,0,2022,91,0,3,',
+    '9111,ll,吕岚,0,2022,90,0,3,',
+    '9120,zhx,张皓轩,0,2022,89,0,3,',
+    '9121,zhx,张浩轩,0,2022,88,0,3,',
+    '9122,zhx,张昊轩,0,2022,87,0,3,',
+    '9123,zhx,张鸿翔,0,2022,86,0,3,',
+    '9130,zyx,张亦欣,0,2022,85,0,3,',
+    '9131,zyx,张艺馨,0,2022,84,0,3,',
+    '9132,zyx,张宇翔,0,2022,83,0,3,',
+    '9140,hx,郝轩,0,2022,82,0,3,',
+    '9150,slx,单乐鑫,0,2022,81,0,3,'
+  ].join('\n') + '\n';
+  function quickRanking(rows, size = 10, domain = 'test') {
+    return req => {
+      const url = new URL(req.url()); if (url.pathname !== `/d/${domain}/ranking`) return;
+      const number = Number(url.searchParams.get('page'));
+      return { body: { udocs: rows.slice((number - 1) * size, number * size), page: number, upcount: Math.max(1, Math.ceil(rows.length / size)), ucount: rows.length } };
+    };
+  }
+  async function quickFixture(rows, options = {}) {
+    return fixture('homepage', '', {}, { storage: userStorage({}, { oiers: {}, teachers: [], practice: {} }), remote: oierRemotes(oierStatic, quickResult), api: quickRanking(rows), strictApi: true, ...options });
+  }
+  async function openQuick(f) { await openWork(f, 'user-open'); await f.page.locator('[data-exh-action="user-oier-quick-open"]').click(); }
+  async function scanQuick(f) { await f.page.locator('[data-exh-action="user-oier-quick-scan"]').click(); await finished(f, 'oier'); }
+  async function candidateIds(f) { return f.page.locator('[data-oier-candidate]').evaluateAll(rows => rows.map(row => +row.dataset.oierCandidate)); }
+
+  await check('oier: quick scans all ranking pages, deduplicates visible users, previews only and confirms one', async () => {
+    const rows = [{ _id: 91, uname: 'AC_陈_思_宁_2026' }, { _id: 92, uname: 'prefix_WangMuHe_suffix' }, { _id: 93, uname: 'xx_LJH_2026' }, { _id: 94, uname: 'unknown123' }, { _id: 95, uname: '赵亦岚' }, { _id: 91, uname: 'AC_陈_思_宁_2026' }, { _id: 0, uname: '陈思宁' }, { _id: 96, uname: '' }];
+    const users = { oiers: { 91: { name: '原资料', uname: 'old-name', oierId: 0 } }, teachers: [91], practice: { 91: 77 } };
+    const f = await quickFixture(rows, { api: quickRanking(rows, 3), storage: userStorage({}, users) }); await openQuick(f);
+    const before = await f.page.evaluate(() => JSON.stringify(window.__store)); await scanQuick(f);
+    assert.deepEqual(await candidateIds(f), [91, 92, 93, 95]); assert.match(await f.page.locator('#exhloj-oier-quick-summary').textContent(), /排名页 5 人/);
+    assert.match(await f.page.locator('#exhloj-oier-quick-results').textContent(), /2 位候选/);
+    assert.equal(await f.page.locator('[data-oier-choice]:checked').count(), 0); assert.equal(await f.page.evaluate(() => JSON.stringify(window.__store)), before);
+    assert.equal((await gmRequests(f)).length, 4); assert.equal(f.requests.filter(r => r.kind === 'fetch').length, 3);
+    await f.page.locator('[data-exh-action="user-oier-quick-apply"][data-uid="91"]').click();
+    const saved = await savedOIer(f); assert.equal(saved.oiers[91].oierId, 9101); assert.equal(saved.oiers[91].uname, rows[0].uname); assert.equal(saved.oiers[91].name, '陈思宁');
+    assert.deepEqual(saved.teachers, [91]); assert.equal(saved.practice[91], 77); assert.equal(saved.oiers[92], undefined); assert.deepEqual(await candidateIds(f), [92, 93, 95]);
+    assert.ok(f.requests.every(r => r.method === 'GET')); assert.deepEqual(await f.page.evaluate(() => { const raw = window.__store['exhloj.coreui.cache.v1']; return (typeof raw === 'string' ? JSON.parse(raw) : raw)['exhloj.ratedcontests'].records; }), ratingSample.records); await f.done();
+  });
+  await check('oier: quick normalizes tone marks, umlauts, case, full pinyin fragments and initials', async () => {
+    const rows = [{ _id: 91, uname: 'AC_WÁNG_MÙ_HÉ_2026' }, { _id: 92, uname: '王_木_河' }, { _id: 93, uname: 'prefixWangMuHe123' }, { _id: 94, uname: 'WMH_2026' }, { _id: 95, uname: 'LǙLÁN_2026' }];
+    const f = await quickFixture(rows); await openQuick(f); await scanQuick(f); assert.deepEqual(await candidateIds(f), [91, 92, 93, 94, 95]);
+    assert.match(await f.page.locator('[data-oier-candidate="91"]').textContent(), /全拼：wangmuhe（完整姓名读音）/);
+    assert.match(await f.page.locator('[data-oier-candidate="92"]').textContent(), /汉字：王木河/);
+    assert.match(await f.page.locator('[data-oier-candidate="94"]').textContent(), /首字母：wmh/);
+    assert.match(await f.page.locator('#exhloj-oier-quick-results').textContent(), /同一 OIerDb ID/); await f.done();
+  });
+  await check('oier: quick queues duplicate names and conflicting fragments with at most three candidates for review', async () => {
+    const rows = [{ _id: 91, uname: '虚构同名' }, { _id: 92, uname: 'ljh' }, { _id: 93, uname: 'csn_wmh' }, { _id: 94, uname: 'xianming' }, { _id: 95, uname: '完全没有匹配的名字' }];
+    const f = await quickFixture(rows); await openQuick(f); await scanQuick(f); assert.deepEqual(await candidateIds(f), [91, 92, 93, 94]);
+    assert.match(await f.page.locator('#exhloj-oier-quick-summary').textContent(), /未入队 1 人/); assert.deepEqual((await savedOIer(f)).oiers, {}); await f.done();
+  });
+  await check('oier: quick skips existing bindings without downloading a database and excludes unrelated context users', async () => {
+    const users = { oiers: { 91: { name: '保留', oierId: 999999, records: [] } }, teachers: [], practice: {} };
+    const f = await quickFixture([{ _id: 91, uname: '陈思宁' }], { storage: userStorage({}, users), json: { udict: { 999: { _id: 999, uname: '王木河' } } } });
+    await openQuick(f); await scanQuick(f); assert.deepEqual(await candidateIds(f), []); assert.equal((await gmRequests(f)).length, 0);
+    assert.match(await f.page.locator('#exhloj-oier-quick-summary').textContent(), /已绑定跳过 1 人/); assert.equal((await savedOIer(f)).oiers[91].oierId, 999999); await f.done();
+  });
+  await check('oier: quick rescans reuse versioned files, and removing candidates never saves profiles', async () => {
+    const f = await quickFixture([{ _id: 91, uname: 'CSN' }]); await openQuick(f); await scanQuick(f);
+    await f.page.locator('[data-exh-action="user-oier-quick-remove"][data-uid="91"]').click(); assert.deepEqual(await candidateIds(f), []); assert.deepEqual((await savedOIer(f)).oiers, {});
+    await scanQuick(f); assert.deepEqual(await candidateIds(f), [91]); const requests = await gmRequests(f); assert.equal(requests.length, 6);
+    assert.equal(requests.filter(r => /\/result\.[a-f\d]{7}\.txt/.test(r.url)).length, 1); assert.equal(requests.filter(r => /\/static\.[a-f\d]{7}\.json/.test(r.url)).length, 1); await f.done();
+  });
+  await check('oier: quick incomplete ranking scans publish no candidates and do not download data', async () => {
+    for (const mode of ['repeat', 'limit', 'forbidden', 'schema']) {
+      const f = await quickFixture([], { storage: userStorage(mode === 'limit' ? { helperPageLimit: 1 } : {}, { oiers: {}, teachers: [], practice: {} }), api: req => {
+        if (!new URL(req.url()).pathname.endsWith('/ranking')) return;
+        if (mode === 'forbidden') return { status: 403, body: {} };
+        if (mode === 'schema') return { body: { udict: { 91: { uname: '陈思宁' } } } };
+        return { body: { udocs: [{ _id: 91, uname: '陈思宁' }], ...(mode === 'limit' ? { upcount: 2 } : {}) } };
+      } });
+      await openQuick(f); await scanQuick(f); assert.deepEqual(await candidateIds(f), []); assert.equal((await gmRequests(f)).length, 0);
+      assert.match(await f.page.locator('[data-work-progress="oier"]').textContent(), /未完成/); assert.deepEqual((await savedOIer(f)).oiers, {}); await f.done();
+    }
+  });
+  await check('oier: quick cancellation during download leaves storage and queue untouched', async () => {
+    const remote = oierRemotes(oierStatic, quickResult); for (const [key, value] of Object.entries(remote)) if (/\/static\.[a-f\d]{7}\.json$/.test(key)) value.delay = 1000;
+    const f = await quickFixture([{ _id: 91, uname: '陈思宁' }], { remote }); await openQuick(f);
+    await f.page.locator('[data-exh-action="user-oier-quick-scan"]').click(); await f.page.waitForFunction(() => window.__gm.length === 3);
+    await f.page.locator('[data-exh-action="work-cancel"]').click(); await finished(f, 'oier'); await f.page.waitForTimeout(50);
+    assert.deepEqual(await candidateIds(f), []); assert.deepEqual((await savedOIer(f)).oiers, {}); assert.match(await f.page.locator('[data-work-progress="oier"]').textContent(), /已取消/); await f.done();
+  });
+  await check('oier: quick preserves changed local profiles and unrelated data when confirming a batch', async () => {
+    const f = await quickFixture([{ _id: 91, uname: '陈思宁' }, { _id: 92, uname: 'WMH' }]); await openQuick(f); await scanQuick(f);
+    await f.page.evaluate(() => { const raw = window.__store['exhloj.coreui.cache.v1'], cache = typeof raw === 'string' ? JSON.parse(raw) : raw; cache['exhloj.user'].oiers[91] = { name: '后来手动编辑', oierId: 7777, records: [] }; cache['exhloj.user'].practice[92] = 123; cache['exhloj.user'].teachers.push(92); window.__store['exhloj.coreui.cache.v1'] = JSON.stringify(cache); });
+    await f.page.locator('[data-exh-action="user-oier-quick-select"][data-selected="yes"]').click(); await f.page.locator('[data-exh-action="user-oier-quick-apply"]:not([data-uid])').click();
+    const saved = await savedOIer(f); assert.equal(saved.oiers[91].name, '后来手动编辑'); assert.equal(saved.oiers[91].oierId, 7777); assert.equal(saved.oiers[92].oierId, 9105); assert.equal(saved.practice[92], 123); assert.deepEqual(saved.teachers, [92]);
+    assert.match(await f.page.locator('#exhloj-oier-quick-results').textContent(), /本地资料已变化/); await f.done();
+  });
+  await check('oier: quick rejects confirmations after account or route changes', async () => {
+    for (const mode of ['account', 'route']) {
+      const f = await quickFixture([{ _id: 91, uname: '陈思宁' }]); await openQuick(f); await scanQuick(f);
+      await f.page.evaluate(mode => { if (mode === 'account') window.UserContext._id = 100; else { history.pushState({}, '', '/d/other/ranking'); document.body.append(document.createElement('span')); } }, mode);
+      if (mode === 'route') await f.page.waitForTimeout(500);
+      await f.page.locator('[data-exh-action="user-oier-quick-apply"][data-uid="91"]').click(); assert.deepEqual((await savedOIer(f)).oiers, {}); await f.done();
+    }
+  });
+  await check('oier: quick paginates candidates and preserves selections across pages without auto-saving', async () => {
+    const rows = Array.from({ length: 61 }, (_, i) => ({ _id: 100 + i, uname: `王木河_${i}` }));
+    const f = await quickFixture(rows, { api: quickRanking(rows, 40) }); await openQuick(f); await scanQuick(f); assert.equal((await candidateIds(f)).length, 30);
+    await f.page.locator('[data-exh-action="user-oier-quick-select"][data-selected="yes"]').click();
+    await f.page.locator('[data-exh-action="user-oier-quick-page"][data-step="1"]').click(); assert.equal(await f.page.locator('[data-oier-choice]:checked').count(), 0);
+    await f.page.locator('[data-exh-action="user-oier-quick-select"][data-selected="yes"]').click();
+    assert.deepEqual((await savedOIer(f)).oiers, {}); await f.page.locator('[data-exh-action="user-oier-quick-apply"]:not([data-uid])').click();
+    assert.equal(Object.keys((await savedOIer(f)).oiers).length, 60); assert.deepEqual(await candidateIds(f), [160]);
+    await f.page.locator('[data-exh-action="user-oier-quick-remove"][data-uid="160"]').click(); assert.equal((await savedOIer(f)).oiers[160], undefined); await f.done();
+  });
+  await check('oier: quick renders usernames literally and supports a chosen domain with no background scans', async () => {
+    const rows = [{ _id: 91, uname: '<img src=x onerror=window.injected=1>陈思宁' }];
+    const f = await quickFixture(rows, { api: quickRanking(rows, 10, 'my-team') }); await openQuick(f); assert.equal(f.requests.length, 1); assert.equal((await gmRequests(f)).length, 0);
+    await f.page.locator('#exhloj-oier-quick-form [name="domain"]').fill('my-team'); await scanQuick(f);
+    assert.deepEqual(await candidateIds(f), [91]); assert.equal(await f.page.locator('#exhloj-oier-quick-results img, #exhloj-oier-quick-results script').count(), 0);
+    assert.equal(await f.page.evaluate(() => window.injected), undefined); assert.equal(await f.page.locator('[data-oier-candidate="91"] a').first().getAttribute('href'), '/d/my-team/user/91'); await f.done();
+  });
+  await check('oier: quick small candidate groups recognize numeric full-pinyin examples and preserve all matches', async () => {
+    const rows = [{ _id: 201, uname: 'zhanghaoxuan2024' }, { _id: 202, uname: 'DL24zhangyixin' }, { _id: 203, uname: 'studentzhanghaoxuan2024' }, { _id: 204, uname: 'zhx' }, { _id: 205, uname: 'zhanghaoxuan_zhangyixin' }, { _id: 206, uname: 'haoxuan2024' }];
+    const f = await quickFixture(rows); await openQuick(f); await scanQuick(f);
+    assert.deepEqual(await candidateIds(f), [201, 202, 203, 206]);
+    for (const [uid, count] of [[201, 3], [202, 2], [203, 3], [206, 1]]) {
+      const group = f.page.locator(`[data-oier-options="${uid}"]`); assert.equal(await group.evaluate(node => node.open), false);
+      assert.equal(await group.locator('[data-oier-profile]').count(), count); assert.match(await group.locator('summary').textContent(), new RegExp(`${count} 位候选`));
+    }
+    assert.match(await f.page.locator('[data-oier-candidate="201"]').textContent(), /全拼：zhanghaoxuan/);
+    assert.match(await f.page.locator('[data-oier-candidate="202"]').textContent(), /全拼：zhangyixin/);
+    assert.deepEqual(await f.page.locator('[data-oier-options="201"] [data-oier-profile]').evaluateAll(nodes => nodes.map(node => +node.dataset.oierProfile)), [9120, 9121, 9122]);
+    assert.deepEqual(await f.page.locator('[data-oier-options="202"] [data-oier-profile]').evaluateAll(nodes => nodes.map(node => +node.dataset.oierProfile)), [9130, 9131]);
+    assert.match(await f.page.locator('#exhloj-oier-quick-results').textContent(), /搜索命中 4 人，超过 3 人/);
+    assert.match(await f.page.locator('#exhloj-oier-quick-results').textContent(), /搜索命中 5 人，超过 3 人/);
+    assert.match(await f.page.locator('#exhloj-oier-quick-results details').last().textContent(), /全拼：zhanghaoxuan/);
+    assert.deepEqual((await savedOIer(f)).oiers, {}); assert.equal((await gmRequests(f)).length, 4); await f.done();
+  });
+  await check('oier: quick small candidate groups require choosing one profile and save exactly that choice', async () => {
+    const f = await quickFixture([{ _id: 201, uname: 'zhanghaoxuan2024' }, { _id: 202, uname: 'DL24zhangyixin' }]); await openQuick(f); await scanQuick(f);
+    const group = f.page.locator('[data-oier-options="201"]'), confirm = f.page.locator('[data-exh-action="user-oier-quick-apply"][data-uid="201"]');
+    assert.equal(await group.locator('input[type="radio"]:checked').count(), 0); assert.equal(await confirm.isDisabled(), true);
+    await group.locator('summary').click(); assert.equal(await group.locator('[data-oier-profile="9121"]').isVisible(), true);
+    await group.locator('input[value="9121"]').check(); await group.locator('input[value="9122"]').check();
+    assert.equal(await group.locator('input[type="radio"]:checked').count(), 1); assert.match(await group.locator('summary').textContent(), /张昊轩 #9122/);
+    assert.equal(await f.page.locator('[data-oier-choice="201"]').isChecked(), true); assert.deepEqual((await savedOIer(f)).oiers, {});
+    await group.locator('summary').click(); assert.equal(await group.locator('[data-oier-profile="9121"]').isVisible(), false);
+    await confirm.click(); const saved = await savedOIer(f); assert.equal(saved.oiers[201].oierId, 9122); assert.equal(saved.oiers[201].name, '张昊轩'); assert.equal(saved.oiers[201].uname, 'zhanghaoxuan2024'); assert.equal(saved.oiers[202], undefined);
+    assert.equal((await gmRequests(f)).length, 4); await f.done();
+  });
+  await check('oier: quick small candidate groups cannot be guessed by bulk confirmation', async () => {
+    const f = await quickFixture([{ _id: 201, uname: 'zhanghaoxuan2024' }, { _id: 202, uname: 'DL24zhangyixin' }, { _id: 206, uname: 'haoxuan2024' }]); await openQuick(f); await scanQuick(f);
+    await f.page.locator('[data-exh-action="user-oier-quick-select"][data-selected="yes"]').click(); await f.page.locator('[data-exh-action="user-oier-quick-apply"]:not([data-uid])').click();
+    let saved = await savedOIer(f); assert.equal(saved.oiers[206].oierId, 9140); assert.equal(saved.oiers[201], undefined); assert.equal(saved.oiers[202], undefined);
+    assert.match(await f.page.locator('#exhloj-oier-quick-results').textContent(), /有多个候选，请先展开并选择一人/);
+    for (const [uid, id] of [[201, 9121], [202, 9131]]) { const group = f.page.locator(`[data-oier-options="${uid}"]`); await group.locator('summary').click(); await group.locator(`input[value="${id}"]`).check(); }
+    await f.page.locator('[data-exh-action="user-oier-quick-apply"]:not([data-uid])').click(); saved = await savedOIer(f); assert.equal(saved.oiers[201].oierId, 9121); assert.equal(saved.oiers[202].oierId, 9131); assert.equal(saved.oiers[206].oierId, 9140); await f.done();
+  });
+  await check('oier: quick full pinyin verifies whole name readings instead of unrelated shared initials', async () => {
+    const f = await quickFixture([{ _id: 201, uname: 'wangmaohua2024' }, { _id: 202, uname: 'WMH2024' }, { _id: 203, uname: 'zhangyuxiang2024' }]); await openQuick(f); await scanQuick(f);
+    assert.deepEqual(await candidateIds(f), [202, 203]);
+    assert.equal(await f.page.locator('[data-oier-options="203"] [data-oier-profile]').count(), 1); assert.equal(await f.page.locator('[data-oier-options="203"] [data-oier-profile="9132"]').count(), 1);
+    assert.deepEqual((await savedOIer(f)).oiers, {}); await f.done();
+  });
+  await check('oier: quick full pinyin supports polyphonic characters without relying on one initials spelling', async () => {
+    const f = await quickFixture([{ _id: 201, uname: 'shanlexin2024' }, { _id: 202, uname: 'DL24danyuexin' }]); await openQuick(f); await scanQuick(f);
+    assert.deepEqual(await candidateIds(f), [201, 202]); for (const uid of [201, 202]) assert.equal(await f.page.locator(`[data-oier-options="${uid}"] [data-oier-profile="9150"]`).count(), 1); await f.done();
+  });
+  await check('oier: quick small candidate choice and expansion survive pagination and fit the dialog', async () => {
+    const rows = [...Array.from({ length: 30 }, (_, i) => ({ _id: 500 + i, uname: `王木河_${i}` })), { _id: 600, uname: 'zhanghaoxuan2024' }];
+    const f = await quickFixture(rows, { api: quickRanking(rows, 40) }); await openQuick(f); await scanQuick(f);
+    await f.page.locator('[data-exh-action="user-oier-quick-page"][data-step="1"]').click(); const group = f.page.locator('[data-oier-options="600"]'); await group.locator('summary').click(); await group.locator('input[value="9122"]').check();
+    await f.page.locator('[data-exh-action="user-oier-quick-page"][data-step="-1"]').click(); await f.page.locator('[data-exh-action="user-oier-quick-page"][data-step="1"]').click();
+    assert.equal(await group.evaluate(node => node.open), true); assert.equal(await group.locator('input[value="9122"]').isChecked(), true); assert.equal(await f.page.locator('[data-oier-choice="600"]').isChecked(), true);
+    await f.page.setViewportSize({ width: 1280, height: 900 }); await f.page.screenshot({ path: 'tests/output/oier-quick-desktop.png' });
+    await f.page.setViewportSize({ width: 400, height: 800 }); const bounds = await f.page.locator('#exhloj-local-dialog').boundingBox(); assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 400);
+    await f.page.screenshot({ path: 'tests/output/oier-quick-mobile.png' }); assert.deepEqual((await savedOIer(f)).oiers, {}); await f.done();
   });
   fs.writeFileSync('tests/output/browser-results.json', JSON.stringify({ version: require('../package.json').version, scriptSha256: crypto.createHash('sha256').update(script).digest('hex'), browser: browser.version(), passed: checks.length, checks }, null, 2));
   console.log(`All ${checks.length} browser scenarios passed.`);
