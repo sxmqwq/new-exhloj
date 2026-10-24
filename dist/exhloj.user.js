@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Extend HLOJ
 // @namespace    exhloj-local
-// @version      2.5.1
+// @version      2.5.2
 // @description  core/ui/captcha/remote-problem/contest-helper/juan-monitor/user；本地重制，无旧后端依赖。
 // @author       Extend HLOJ Dev Team (original); Local restoration
 // @match        *://oj.hailiangedu.com/*
@@ -47,9 +47,9 @@
   if (!(location.hostname === 'oj.hailiangedu.com' ||
       location.host === 'www.nfls.com.cn:10611' || /(^|\.)oifha\.com$/.test(location.hostname))) return;
   if (document.documentElement.dataset.exhlojCoreUi) return;
-  document.documentElement.dataset.exhlojCoreUi = '2.5.1';
+  document.documentElement.dataset.exhlojCoreUi = '2.5.2';
 
-  const VERSION = '2.5.1';
+  const VERSION = '2.5.2';
   const SETTINGS_KEY = 'exhloj.coreui.settings.v1';
   const CACHE_KEY = 'exhloj.coreui.cache.v1';
   const CAPTCHA_KEY = 'exhloj.local.captcha.history';
@@ -2016,9 +2016,12 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
     const cache = cacheObject(), signature = JSON.stringify([cache['exhloj.user'], cache['exhloj.ratedcontests']]);
     if (userMemo && userMemoSignature === signature) return userMemo;
     userMemoSignature = signature; userLoadError = '';
-    let users, ratings;
-    try { users = normalizeUserData(cache['exhloj.user']); ratings = normalizeUserRatings(cache['exhloj.ratedcontests']); }
-    catch (error) { userLoadError = error.message; users = normalizeUserData(); ratings = normalizeUserRatings(); }
+    let users, ratings; const errors = [];
+    try { users = normalizeUserData(cache['exhloj.user']); }
+    catch (error) { errors.push(`用户资料：${error.message}`); users = normalizeUserData(); }
+    try { ratings = normalizeUserRatings(cache['exhloj.ratedcontests']); }
+    catch (error) { errors.push(`Rating：${error.message}`); ratings = normalizeUserRatings(); }
+    userLoadError = errors.join('；');
     const histories = new Map(), byContest = new Map();
     for (const row of ratings.records) {
       const [uid, index, rank, rating, performance] = row, history = histories.get(uid) || [];
@@ -2027,8 +2030,12 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
     }
     return userMemo = { users, ratings, histories, byContest };
   }
-  function writeUserStore(users, ratings) {
+  function writeUserStore(users, ratings, repair = false) {
     const nextUsers = normalizeUserData(users), nextRatings = normalizeUserRatings(ratings), cache = cacheObject();
+    if (!repair) {
+      try { normalizeUserData(cache['exhloj.user']); normalizeUserRatings(cache['exhloj.ratedcontests']); }
+      catch (error) { throw workError(`本地数据格式异常，未保存：${error.message}。请在资料 JSON 工具中明确修复异常部分。`); }
+    }
     cache['exhloj.user'] = nextUsers; cache['exhloj.ratedcontests'] = nextRatings; cache['exhloj.userStoreVersion'] = Date.now();
     if (new Blob([JSON.stringify(cache)]).size > LIMIT - 32768) throw workError('本地用户资料过大，请减少获奖记录或比赛数量');
     save(CACHE_KEY, cache); userMemoSignature = userMemoRaw = undefined; refreshUserModule();
@@ -2488,14 +2495,18 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
     }
     box.append(table); if (rows.length > 100) box.append(el('p', {}, '仅展示前 100 人；刷新全部会更新所有已绑定资料。'));
   }
+  function oierEditorSnapshot(form) {
+    return JSON.stringify(['name', 'level', 'grade', 'oierId', 'awards'].map(name => form.elements[name].value));
+  }
   async function fillUserFromOIerLink(form) {
-    const address = form.elements.oierURL.value.trim(), status = $('#exhloj-user-oier-status'); let id;
+    const address = form.elements.oierURL.value.trim(), status = $('#exhloj-user-oier-status'), baseline = oierEditorSnapshot(form); let id;
     try { id = oierIdFromURL(address); } catch (error) { status.textContent = `读取失败：${error.message}`; throw error; }
     status.textContent = '正在读取 OIerDb…';
     await runWork('oier', async (job, state) => {
       const database = await loadOIerDatabase(job), profiles = await readOIerProfiles(database, [id], job), profile = profiles.get(id);
       checkJob(job);
       if (!form.isConnected || form.elements.oierURL.value.trim() !== address) throw workError('编辑页面或链接已变化，请重新读取');
+      if (oierEditorSnapshot(form) !== baseline) throw workError('编辑内容已变化，已保留当前输入；需要导入时请重新读取链接');
       if (!profile) throw workError(`OIerDb 中未找到选手 #${id}；请检查链接，原资料已保留`);
       for (const key of ['name', 'level', 'grade', 'oierId']) form.elements[key].value = profile[key];
       form.elements.awards.value = JSON.stringify(profile.records, null, 2); form.exhlojOIerPreview = profile;
@@ -2505,23 +2516,28 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
     if (workStates.oier.errors.length) status.textContent = `读取失败：${workStates.oier.errors.join('；')}`;
   }
   async function refreshOIerUsers(uid, control) {
-    const mappings = Object.entries(userStore().users.oiers).filter(([key, profile]) => profile.oierId && (uid === undefined || +key === +uid)).map(([key, profile]) => [+key, profile.oierId]);
+    const mappings = Object.entries(userStore().users.oiers).filter(([key, profile]) => profile.oierId && (uid === undefined || +key === +uid)).map(([key, profile]) => [+key, profile.oierId, JSON.stringify(profile)]);
     if (!mappings.length) throw workError('没有已绑定的 OIerDb ID；请先在编辑资料中粘贴选手链接并保存');
+    const editor = $('#exhloj-user-editor'), editorBaseline = editor ? oierEditorSnapshot(editor) : undefined;
     if (!control.closest('#exhloj-local-dialog')) { const body = userToolBody('刷新 OIerDb 资料'); workProgress(body, 'oier'); }
     await runWork('oier', async (job, state) => {
       const database = await loadOIerDatabase(job), profiles = await readOIerProfiles(database, mappings.map(([, id]) => id), job);
       checkJob(job); const { users, ratings } = userStore(), next = clone(users), updatedKeys = new Set(); let updated = 0;
-      for (const [key, id] of mappings) {
+      for (const [key, id, baseline] of mappings) {
         if (next.oiers[key]?.oierId !== id) { state.errors.push(`OJ #${key} 的绑定已变化，已跳过`); continue; }
+        if (JSON.stringify(next.oiers[key]) !== baseline) { state.errors.push(`OJ #${key} 的本地资料已变化，已跳过；重新刷新可更新`); continue; }
         const profile = profiles.get(id);
         if (!profile) { state.errors.push(`OIerDb 未找到 #${id}（OJ #${key}），原资料已保留`); continue; }
         next.oiers[key] = { ...next.oiers[key], ...profile }; updated++; updatedKeys.add(key);
       }
       checkJob(job); if (updated) writeUserStore(next, ratings);
       const form = $('#exhloj-user-editor');
-      if (form && updatedKeys.has(+form.dataset.uid) && next.oiers[form.dataset.uid]) {
-        const profile = next.oiers[form.dataset.uid]; for (const key of ['name', 'level', 'grade', 'oierId']) form.elements[key].value = profile[key];
-        form.elements.awards.value = JSON.stringify(profile.records, null, 2); form.exhlojOIerPreview = profile;
+      if (form && form === editor && updatedKeys.has(+form.dataset.uid) && next.oiers[form.dataset.uid]) {
+        if (oierEditorSnapshot(form) !== editorBaseline) state.errors.push('编辑内容已变化，已保留编辑框草稿；已保存资料的刷新结果可重新打开查看');
+        else {
+          const profile = next.oiers[form.dataset.uid]; for (const key of ['name', 'level', 'grade', 'oierId']) form.elements[key].value = profile[key];
+          form.elements.awards.value = JSON.stringify(profile.records, null, 2); form.exhlojOIerPreview = profile;
+        }
       }
       renderOIerBindings(); state.message = `已刷新并保存 ${updated}/${mappings.length} 份 OIerDb 资料${state.errors.length ? `；${state.errors.length} 项未更新` : ''}`; notify(state.message);
     }, true);
@@ -2558,7 +2574,12 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
     }
     writeUserStore(next, ratings); notify(clear ? '本地资料已清除' : '本地资料已保存');
   }
-  function userExportData() { const { users, ratings } = userStore(); return { format: 'exhloj-user', schemaVersion: 1, version: VERSION, users, ratings }; }
+  function userExportData() {
+    const { users, ratings } = userStore(), original = userLoadError ? cacheObject() : {};
+    return { format: 'exhloj-user', schemaVersion: 1, version: VERSION,
+      users: Object.hasOwn(original, 'exhloj.user') ? original['exhloj.user'] : users,
+      ratings: Object.hasOwn(original, 'exhloj.ratedcontests') ? original['exhloj.ratedcontests'] : ratings };
+  }
   function openUserJSON() {
     const body = userToolBody('用户数据 JSON'), area = el('textarea', { id: 'exhloj-user-json', spellcheck: 'false' }); area.value = JSON.stringify(userExportData(), null, 2);
     body.append(el('p', {}, '保存将替换这里提供的用户资料和 Rating。也可粘贴旧版 exhloj.user / exhloj.ratedcontests 缓存；未提供的部分保留。'), area, button('校验并保存', 'user-json-save'), button('导出用户数据', 'user-export'));
@@ -2566,13 +2587,13 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
   function importUserJSON(text) {
     if (new Blob([text]).size > LIMIT) throw workError('用户数据超过 2 MiB');
     const data = JSON.parse(text); if (!isObject(data)) throw workError('用户数据必须为对象');
-    let users, ratings; const current = userStore();
+    const cache = cacheObject(); let users = cache['exhloj.user'], ratings = cache['exhloj.ratedcontests'];
     if (data.format === 'exhloj-user') { if (data.schemaVersion !== 1 || !Object.hasOwn(data, 'users') || !Object.hasOwn(data, 'ratings')) throw workError('用户备份格式无效'); users = data.users; ratings = data.ratings; }
-    else if (Object.hasOwn(data, 'exhloj.user') || Object.hasOwn(data, 'exhloj.ratedcontests')) { users = data['exhloj.user'] ?? current.users; ratings = data['exhloj.ratedcontests'] ?? current.ratings; }
-    else if (Object.hasOwn(data, 'oiers') || Object.hasOwn(data, 'teachers') || Object.hasOwn(data, 'practice')) { users = data; ratings = current.ratings; }
-    else if (Object.hasOwn(data, 'contests') && Object.hasOwn(data, 'records')) { users = current.users; ratings = data; }
+    else if (Object.hasOwn(data, 'exhloj.user') || Object.hasOwn(data, 'exhloj.ratedcontests')) { users = data['exhloj.user'] ?? users; ratings = data['exhloj.ratedcontests'] ?? ratings; }
+    else if (Object.hasOwn(data, 'oiers') || Object.hasOwn(data, 'teachers') || Object.hasOwn(data, 'practice')) users = data;
+    else if (Object.hasOwn(data, 'contests') && Object.hasOwn(data, 'records')) ratings = data;
     else throw workError('没有找到用户资料或 Rating 数据');
-    writeUserStore(users, ratings); notify('用户数据已保存');
+    writeUserStore(users, ratings, true); notify('用户数据已保存');
   }
   function openUserHistory(uid) {
     uid = localUid(uid); const body = userToolBody(`Rating 历史 · ${localUserName(uid)} (#${uid})`), store = userStore(), history = store.histories.get(uid) || [];
@@ -2608,7 +2629,7 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
   }
   function openUserRated() {
     const body = userToolBody('Rated 比赛 · 本地结算'), area = el('textarea', { id: 'exhloj-user-commands', spellcheck: 'false' }); area.value = userStore().ratings.commands;
-    body.append(el('p', {}, '先定义比赛，再按顺序结算。相同 rating 行中的多场比赛并行计算，对每人采用加权变化最大的场次。数据完整且结算成功后才替换本地 Rating。'),
+    body.append(el('p', {}, '每次结算都从 1800 重新计算当前命令中的完整历史，成功后整体替换原 Rating 记录。新增比赛时，请保留原命令并在末尾追加；相同 rating 行中的多场比赛并行计算，对每人采用加权变化最大的场次。'),
       el('pre', {}, 'version:2\ncontest:域ID/比赛ID,比赛标题,1\nrating:域ID/比赛ID'),
       el('p', {}, 'version:1 只结算正分选手；version:2 结算所有有提交且有排名的选手。权重范围 0–10。contest 行可在第四项附上 [[UID,排名],...]，使用已有名次时无需读取 OJ。# 开头的行是注释。'), area,
       button('保存命令草稿', 'user-commands-save'), button('读取榜单并结算到本地', 'user-calculate'), button('导出用户数据', 'user-export'));
@@ -2657,7 +2678,7 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
   }
   async function calculateUserRatings(text) {
     if (!settings.userModule) throw workError('请先启用 user 模块');
-    const plan = parseRatedCommands(text);
+    const plan = parseRatedCommands(text), baseline = JSON.stringify(userStore().ratings);
     return runWork('user', async (job, state) => {
       for (const contest of plan.contests) if (!contest.users) {
         const body = await jobJSON(job, ratedContestPath(contest.id) + '/scoreboard'); contest.users = ratedUsersFromBoard(body, contest.version);
@@ -2680,7 +2701,9 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
         const values = [...chosen.values()], correction = 1 - sum(values.map(row => row.diff)) / values.length;
         for (const row of values) { const rating = row.old + Math.round((row.diff + correction) * row.weight); currentRatings.set(row.uid, rating); records.push([row.uid, row.index, row.rank, rating, row.performance]); }
       }
-      checkJob(job); writeUserStore(userStore().users, { contests: plan.contests.map(row => [row.id, row.title, row.weight]), records, commands: text });
+      checkJob(job); const store = userStore();
+      if (JSON.stringify(store.ratings) !== baseline) throw workError('本地 Rating 数据或命令草稿已变化，未覆盖新数据；请核对后重新结算');
+      writeUserStore(store.users, { contests: plan.contests.map(row => [row.id, row.title, row.weight]), records, commands: text });
       state.message = `已完成本地结算：${plan.contests.length} 场比赛，${records.length} 条记录；未上传数据`; notify('Rating 已在本机结算');
     }, true);
   }

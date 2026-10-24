@@ -477,7 +477,7 @@ async function check(name, work) {
   async function juanJSON(f) { return JSON.parse((await downloaded(f, 'juan-json')).toString()); }
 
   await check('work: branding, module switches, menu deduplication and default no background requests', async () => {
-    assert.match(script, /\/\/ @name\s+Extend HLOJ\n/); assert.match(script, /\/\/ @version\s+2\.5\.1/);
+    assert.match(script, /\/\/ @name\s+Extend HLOJ\n/); assert.equal(script.match(/^\/\/ @version\s+(\S+)/m)?.[1], require('../package.json').version);
     const f = await fixture('contest_detail', '<ol id="menu-nav-user"></ol>', { tdoc }, { path: `/d/test/contest/${tid}`, storage: fast() });
     await f.page.waitForTimeout(500);
     assert.equal(f.requests.length, 1); assert.equal(await f.page.locator('[data-exh-work-menu]').count(), 3);
@@ -608,6 +608,54 @@ async function check(name, work) {
   const userStorage = (options = {}, users = userSample, ratings = ratingSample) => ({ ...fast(options), 'exhloj.coreui.cache.v1': { 'exhloj.user': users, 'exhloj.ratedcontests': ratings, 'exhloj.problemOriginCache': { keep: true } } });
   async function userData(f) { return JSON.parse((await downloaded(f, 'user-export')).toString()); }
   async function openEditor(f, uid) { await openWork(f, 'user-open'); await f.page.locator('#exhloj-user-id').fill(String(uid)); await f.page.locator('#exhloj-local-dialog [data-exh-action="user-edit"]:not([data-uid])').click(); }
+
+  await check('user audit: damaged user data cannot erase the intact section and requires explicit JSON repair', async () => {
+    for (const damaged of ['users', 'ratings']) {
+      const storage = structuredClone(userStorage()), raw = storage['exhloj.coreui.cache.v1'];
+      if (damaged === 'users') raw['exhloj.user'].teachers = 'invalid';
+      else raw['exhloj.ratedcontests'] = { ...ratingSample, records: [[7, 999, 1, 2000, 2200]] };
+      const f = await fixture('homepage', '', {}, { storage });
+      const data = await f.page.evaluate(() => window.UiContext.exhloj.user.getData());
+      assert.deepEqual(data[damaged], raw[damaged === 'users' ? 'exhloj.user' : 'exhloj.ratedcontests'], 'Export retains the damaged original for repair');
+      if (damaged === 'users') assert.deepEqual(data.ratings, ratingSample);
+      else assert.equal(data.users.oiers[7].name, '七号');
+      if (damaged === 'users') assert.equal(await f.page.evaluate(() => window.UiContext.exhloj.user.ranking('current').length), 3);
+      const before = await f.page.evaluate(() => JSON.stringify(window.__store));
+      await openEditor(f, 7); await f.page.locator('[name="name"]').fill('手动编辑'); await f.page.locator('[data-exh-action="user-save"]').click();
+      assert.equal(await f.page.evaluate(() => JSON.stringify(window.__store)), before); assert.match(await f.page.locator('#exhloj-local-toast').textContent(), /格式异常/);
+      await f.page.locator('[data-exh-action="close"]').click(); await openWork(f, 'user-open'); await f.page.locator('[data-exh-action="user-json"]').click();
+      const goodUsers = { oiers: { 7: { name: '修复资料' } }, teachers: [], practice: {} }, goodRatings = { contests: [], records: [] };
+      await f.page.locator('#exhloj-user-json').fill(JSON.stringify(damaged === 'users' ? goodRatings : goodUsers));
+      await f.page.locator('[data-exh-action="user-json-save"]').click(); assert.equal(await f.page.evaluate(() => JSON.stringify(window.__store)), before);
+      await f.page.locator('#exhloj-user-json').fill(JSON.stringify(damaged === 'users' ? goodUsers : goodRatings));
+      await f.page.locator('[data-exh-action="user-json-save"]').click();
+      const repaired = await f.page.evaluate(() => window.UiContext.exhloj.user.getData());
+      if (damaged === 'users') { assert.equal(repaired.users.oiers[7].name, '修复资料'); assert.deepEqual(repaired.ratings, ratingSample); }
+      else { assert.equal(repaired.users.oiers[7].name, '七号'); assert.deepEqual(repaired.ratings.records, []); }
+      await f.done();
+    }
+  });
+  await check('user audit: a delayed Rating calculation cannot overwrite newly saved Rating data', async () => {
+    const board = { rows: [[{ type: 'rank', value: '1' }, { type: 'user', raw: 7 }, { type: 'record', score: 100, raw: oid(0.1) }]], tdoc: { rule: 'oi' } };
+    const f = await fixture('homepage', '', {}, { storage: userStorage(), strictApi: true, api: { [`GET /d/test/contest/${tid}/scoreboard`]: { delay: 600, body: board } } });
+    await openWork(f, 'user-open'); await f.page.locator('[data-exh-action="user-rated"]').click();
+    await f.page.locator('#exhloj-user-commands').fill(`version:2\ncontest:test/${tid},Round,1\nrating:test/${tid}`);
+    await f.page.locator('[data-exh-action="user-calculate"]').click(); await f.page.waitForFunction(() => document.querySelector('[data-work-progress="user"]').textContent.includes('/scoreboard'));
+    const changed = await f.page.evaluate(() => {
+      const raw = window.__store['exhloj.coreui.cache.v1'], cache = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      cache['exhloj.ratedcontests'].records[0][3] = 2300; cache['exhloj.ratedcontests'].commands = '# saved in another tab';
+      window.__store['exhloj.coreui.cache.v1'] = JSON.stringify(cache); return window.__store['exhloj.coreui.cache.v1'];
+    });
+    await finished(f, 'user'); assert.equal(await f.page.evaluate(() => window.__store['exhloj.coreui.cache.v1']), changed);
+    assert.match(await f.page.locator('[data-work-errors="user"]').textContent(), /Rating.*已变化/);
+    await f.page.locator('[data-exh-action="user-calculate"]').click(); await f.page.waitForFunction(() => document.querySelector('[data-work-progress="user"]').textContent.includes('/scoreboard'));
+    await f.page.evaluate(() => {
+      const cache = JSON.parse(window.__store['exhloj.coreui.cache.v1']); cache['exhloj.user'].oiers[7].name = '结算期间编辑资料';
+      window.__store['exhloj.coreui.cache.v1'] = JSON.stringify(cache);
+    });
+    await finished(f, 'user'); const retry = await f.page.evaluate(() => window.UiContext.exhloj.user.getData());
+    assert.equal(retry.ratings.records[0][3], 1801); assert.equal(retry.users.oiers[7].name, '结算期间编辑资料'); await f.done();
+  });
 
   await check('user: ordinary and signed-out users can edit any local UID with no OJ writes', async () => {
     for (const userId of [42, 0]) {
@@ -772,6 +820,38 @@ async function check(name, work) {
   async function gmRequests(f) { return f.page.evaluate(() => window.__gm); }
   async function importOIer(f, id) { await f.page.locator('[name="oierURL"]').fill(`${OIER_TEST_API.replace('oier.api.', 'oier.')}/oier/${id}`); await f.page.locator('[data-exh-action="user-oier-import"]').click(); await finished(f, 'oier'); }
   async function pasteOIerURL(f, text) { await f.page.locator('[name="oierURL"]').evaluate((area, text) => { const clipboardData = new DataTransfer(); clipboardData.setData('text/plain', text); area.dispatchEvent(new ClipboardEvent('paste', { clipboardData, bubbles: true, cancelable: true })); }, text); }
+
+  function delayedOIerRemotes() {
+    const remote = oierRemotes(); for (const [key, value] of Object.entries(remote)) if (/\/static\.[a-f\d]{7}\.json$/.test(key)) value.delay = 600;
+    return remote;
+  }
+  await check('oier audit: a refresh preserves saved profile edits even when the binding is unchanged', async () => {
+    const users = structuredClone(userSample); users.oiers[8].oierId = 2345;
+    const f = await fixture('homepage', '', {}, { storage: userStorage({}, users), remote: delayedOIerRemotes() }); await openWork(f, 'user-open');
+    await f.page.locator('[data-exh-action="user-oier-refresh-all"]').click(); await f.page.waitForFunction(() => window.__gm.length === 3);
+    await f.page.evaluate(() => {
+      const raw = window.__store['exhloj.coreui.cache.v1'], cache = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      Object.assign(cache['exhloj.user'].oiers[7], { name: '下载期间保存的姓名', level: 3 }); window.__store['exhloj.coreui.cache.v1'] = JSON.stringify(cache);
+    });
+    await finished(f, 'oier'); const data = await savedOIer(f);
+    assert.equal(data.oiers[7].oierId, 1234); assert.equal(data.oiers[7].name, '下载期间保存的姓名'); assert.equal(data.oiers[7].level, 3);
+    assert.equal(data.oiers[8].name, '示例乙'); assert.match(await f.page.locator('[data-work-errors="oier"]').textContent(), /本地资料已变化/); await f.done();
+  });
+  await check('oier audit: link reads preserve edits typed into the form while downloading', async () => {
+    const f = await fixture('homepage', '', {}, { storage: userStorage(), remote: delayedOIerRemotes() }); await openEditor(f, 7);
+    const before = await savedOIer(f);
+    await f.page.locator('[data-exh-action="user-oier-import"]').click(); await f.page.waitForFunction(() => window.__gm.length === 3);
+    await f.page.locator('[name="name"]').fill('尚未保存的姓名'); await finished(f, 'oier');
+    assert.equal(await f.page.locator('[name="name"]').inputValue(), '尚未保存的姓名'); assert.equal(await f.page.locator('[name="level"]').inputValue(), '6');
+    assert.deepEqual(await savedOIer(f), before); assert.match(await f.page.locator('#exhloj-user-oier-status').textContent(), /编辑内容已变化/); await f.done();
+  });
+  await check('oier audit: refreshing saved data does not replace a newly edited form draft', async () => {
+    const f = await fixture('homepage', '', {}, { storage: userStorage(), remote: delayedOIerRemotes() }); await openEditor(f, 7);
+    await f.page.locator('[data-exh-action="user-oier-refresh"]').click(); await f.page.waitForFunction(() => window.__gm.length === 3);
+    await f.page.locator('[name="name"]').fill('保留编辑框草稿'); await finished(f, 'oier');
+    assert.equal((await savedOIer(f)).oiers[7].name, '王茂骅'); assert.equal(await f.page.locator('[name="name"]').inputValue(), '保留编辑框草稿');
+    assert.match(await f.page.locator('[data-work-errors="oier"]').textContent(), /编辑内容已变化/); await f.done();
+  });
 
   await check('oier: profile and permission panels are outside nested accepted-problem columns and repair misplaced panels', async () => {
     const body = '<div class="section" id="profile-section"><div class="profile-header">Profile</div><div class="profile-content"><div id="accepted-problems"><h1>通过的题目</h1><div class="row">' + Array.from({ length: 4 }, (_, i) => `<div class="medium-3 columns"><ul><li>P${i + 1}</li></ul></div>`).join('') + '</div></div></div></div>';

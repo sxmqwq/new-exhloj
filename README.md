@@ -1,6 +1,6 @@
 # Extend HLOJ
 
-Extend HLOJ 的本地重制版，当前版本 **2.5.1**。安装在 Tampermonkey 中，增强 HLOJ / 部分 Hydro 页面的训练体验。
+Extend HLOJ 的本地重制版，当前版本 **2.5.2**。安装在 Tampermonkey 中，增强 HLOJ / 部分 Hydro 页面的训练体验。
 
 本版保留原脚本的作者信息，恢复了以下七个模块，不依赖原插件的共享后端。
 
@@ -21,7 +21,7 @@ Extend HLOJ 的本地重制版，当前版本 **2.5.1**。安装在 Tampermonkey
 3. 升级已有版本时，推荐直接在原脚本的编辑器中替换全文，以保留设置和缓存。作为新脚本安装时，先停用旧脚本，再按需导入旧版 JSON 备份。
 4. 刷新 OJ，在用户菜单或右下角 **Extend HLOJ** 按钮打开设置。
 
-现成的安装包位于 [`release/exhloj-2.5.1.zip`](release/exhloj-2.5.1.zip)，其中包含脚本、安装说明、版本信息和第三方许可证。
+现成的安装包位于 [`release/exhloj-2.5.2.zip`](release/exhloj-2.5.2.zip)，其中包含脚本、安装说明、版本信息和第三方许可证。
 
 完整使用说明见 [`docs/INSTALL.zh-CN.txt`](docs/INSTALL.zh-CN.txt)。本仓库没有预设 GitHub 用户名，也没有自动更新地址；发布到自己的仓库后，可按需要自行配置。
 
@@ -29,9 +29,13 @@ Extend HLOJ 的本地重制版，当前版本 **2.5.1**。安装在 Tampermonkey
 
 用户菜单 → **用户工具** → **编辑资料**。所有本地编辑入口均无特定 UID 的管理员限制；资料只影响本机显示，不改变站点账号、角色或认证。
 
+比赛 Rating 的命令和计算公式见 [`docs/RATING.zh-CN.md`](docs/RATING.zh-CN.md)。每次结算会从 1800 重算当前命令中的完整历史，成功后整体替换原记录；新增比赛需要保留原命令并在末尾追加。
+
 单人编辑器只接受完整的选手页面链接，例如 `https://oier.baoshuo.dev/oier/12345`。粘贴链接后自动从 OIerDb 官方数据读取姓名、CCF 等级、毕业年份、排名/积分和获奖记录；核对后点击 **保存本地资料**。选手 ID 从链接记录，排名页、网页正文和 Markdown 不再作为导入输入。
 
 编辑器、个人资料卡和已绑定名单均提供 **刷新**，用户工具中可 **刷新全部 OIerDb 资料**。刷新会更新并保存 OIerDb 字段，保留 OJ 用户名、教练标记、题目分和 Rating。名单显示每人的 OIerDb ID 与最后更新时间；未绑定、ID 已变化或读取失败的资料会保留并显示原因。
+
+读取期间新保存的资料会保留，冲突项跳过并显示原因；在编辑框中继续输入时，返回结果不会覆盖这些新输入。用户资料或 Rating 格式异常时，两部分独立显示，普通保存停止；JSON 编辑和用户导出会保留异常原文，明确修复相应部分后可继续使用。
 
 首次读取需下载官方数据，后续在当前页面按数据库版本复用；每次刷新都会重新检查官方版本。有进度显示和取消按钮。首次访问时按油猴提示允许 `oier.api.baoshuo.dev`。读取链接时只填入表单，保存后才建立本地绑定；刷新已绑定资料会直接保存。
 
@@ -89,15 +93,18 @@ npm test
 
 ```bash
 npm run package
+npm run package:check
 ```
 
 输出为 `release/exhloj-<版本>.zip`，并更新 `VERSION.txt` 与 `SHA256SUMS`。调整版本时需要同时修改 `package.json` 与源码模板中的三个版本位置，构建器会检查一致性。
+
+`package:check` 只读核对当前安装包内的脚本、说明、许可证、版本及 SHA-256，CI 在重新生成安装包前运行它，防止把仓库中过期的 ZIP 掩盖掉。固定 ZIP 时间戳使同一环境重复打包得到相同文件。升级版本时也要同步 `package-lock.json` 的项目版本和安装说明首行。
 
 目录说明与维护要点见 [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)。
 
 ## 验证
 
-当前 **84 组 Chromium 浏览器场景通过**，覆盖七个模块及 OIerDb 的 24 条获奖记录示例。测试拦截页面和接口请求，使用固定响应，不需要 OJ 账号。测试输出在 `tests/output/`。
+当前 **89 组 Chromium 浏览器场景通过**，覆盖七个模块及 OIerDb 的 24 条获奖记录示例。测试拦截页面和接口请求，使用固定响应，不需要 OJ 账号。测试输出在 `tests/output/`。
 
 验证记录见 [`docs/validation-result.json`](docs/validation-result.json)。这些检查不代表已经完成 HLOJ 登录态实测；站点特有模板或权限差异仍可能影响实际效果。
 
@@ -107,7 +114,7 @@ npm run package
 
 解压后，将目录内的文件上传到你的仓库根目录，包括 `.github`、`.gitignore` 和 `.gitattributes`。源码、构建产物、说明和测试已分开整理。
 
-创建 GitHub Release 时，可以上传 `release/exhloj-2.5.1.zip` 和 `dist/exhloj.user.js`。更改功能后先构建、测试，再生成对应版本的安装包。
+创建 GitHub Release 时，可以上传 `release/exhloj-2.5.2.zip` 和 `dist/exhloj.user.js`。更改功能后先构建、测试，再生成对应版本的安装包。
 
 ## 来源与许可证说明
 
