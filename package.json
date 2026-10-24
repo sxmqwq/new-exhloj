@@ -1,6 +1,6 @@
 {
   "name": "extend-hloj-local",
-  "version": "2.5.1",
+  "version": "2.5.2",
   "description": "Extend HLOJ 本地重制版：core、ui、captcha、remote-problem、contest-helper、juan-monitor、user",
   "private": true,
   "engines": {
@@ -12,7 +12,8 @@
     "build:vendor": "node scripts/build-vendor.mjs",
     "check": "node scripts/check.cjs",
     "test": "node tests/browser.cjs",
-    "package": "python3 scripts/package-release.py"
+    "package": "python3 scripts/package-release.py",
+    "package:check": "python3 scripts/package-release.py --check"
   },
   "devDependencies": {
     "dompurify": "3.4.17",

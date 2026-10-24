@@ -12,8 +12,12 @@ const replaceOnce = (text, token, content) => {
 source = replaceOnce(source, '/* @EXHLOJ_MARKDOWN_VENDOR@ */', vendor);
 source = replaceOnce(source, '/* @EXHLOJ_PINYIN_VENDOR@ */', read('vendor/pinyin.js').trimEnd());
 source = replaceOnce(source, '/* @EXHLOJ_THIRD_PARTY_LICENSES@ */', `/* THIRD-PARTY LICENSE NOTICES\n${notices}\n\n*/\n`);
+source = source.trimEnd() + '\n';
 const version = require('../package.json').version;
-if (!source.includes(`// @version      ${version}\n`) || !source.includes(`const VERSION = '${version}';`)) throw new Error('package.json and userscript versions differ');
+const lock = JSON.parse(read('package-lock.json'));
+if (lock.version !== version || lock.packages?.['']?.version !== version) throw new Error('package-lock.json and package.json versions differ');
+if (!source.includes(`// @version      ${version}\n`) || !source.includes(`const VERSION = '${version}';`) ||
+    !source.includes(`document.documentElement.dataset.exhlojCoreUi = '${version}';`)) throw new Error('package.json and userscript versions differ');
 const output = path.join(root, 'dist/exhloj.user.js');
 if (process.argv.includes('--check')) {
   if (!fs.existsSync(output) || read('dist/exhloj.user.js') !== source) throw new Error('dist/exhloj.user.js differs from source; run npm run build');
