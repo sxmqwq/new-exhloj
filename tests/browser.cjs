@@ -216,8 +216,13 @@ async function check(name, work) {
     const f = await fixture('problem_detail', '<ul class="problem__tags"></ul>', {}, { invalidJSON: true, storage: { 'exhloj.coreui.settings.v1': 'broken JSON' } });
     await f.page.locator('[data-exh-action="problem-copy"]').click();
     await f.page.waitForFunction(() => document.querySelector('#exhloj-local-toast')?.textContent.includes('JSON'));
+    // The explicit click can share the initial remote-module request or retry it after failure.
+    const count = f.requests.length; assert.ok(count === 2 || count === 3);
     await f.page.waitForTimeout(1200);
-    assert.equal(f.requests.length, 2); await f.done();
+    assert.equal(f.requests.length, count, 'An error must not create background retries');
+    const retry = f.page.waitForResponse(response => (response.request().headers().accept || '').includes('application/json'));
+    await f.page.locator('[data-exh-action="problem-copy"]').click(); await retry;
+    assert.equal(f.requests.length, count + 1, 'A later explicit click must make a fresh attempt'); await f.done();
   });
   await check('core: event replay, listener-free broadcasts and SPA route refresh', async () => {
     const f = await fixture('homepage', '<ul class="problem__tags"></ul>');
