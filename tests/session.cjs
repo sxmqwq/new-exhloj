@@ -164,6 +164,7 @@ async function check(name, fn) {
         assert.deepEqual(await f.page.evaluate(() => window.__clipboard), []);
         faults.clear(); await copy(f); await copied(f, `Statement /d/test/p/${change === 'route' ? 4 : 1}`);
         // A successful cached response also expires before the debounced DOM observer runs.
+        await f.page.waitForSelector('[data-exh-action="problem-copy"]');
         const count = apiCount();
         await f.page.evaluate(change => {
           if (change === 'route') history.replaceState({}, '', '/d/test/p/5');
