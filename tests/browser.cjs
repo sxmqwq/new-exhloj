@@ -8,7 +8,7 @@ const root = path.resolve(__dirname, '..');
 process.chdir(root);
 fs.mkdirSync('tests/output', { recursive: true });
 const checks = [];
-let browser;
+let browser, activeCheck, failure;
 const html = (name, body = '', extra = '') => `<!doctype html><html data-page="${name}"><head><meta charset="utf-8"><title>Fixture</title></head>
 <body class="page--${name}"><div class="main"><div class="row"><div class="medium-9 columns">${body}</div><div class="medium-3 columns"></div></div></div>${extra}</body></html>`;
 async function fixture(name, body, context = {}, options = {}) {
@@ -68,6 +68,7 @@ async function fixture(name, body, context = {}, options = {}) {
 }
 async function check(name, work) {
   if (process.env.EXHLOJ_TEST_FILTER && !name.includes(process.env.EXHLOJ_TEST_FILTER)) return;
+  activeCheck = name;
   await work(); checks.push(name); console.log('PASS', name);
 }
 (async () => {
@@ -124,14 +125,14 @@ async function check(name, work) {
     const f = await fixture('homepage', ''); const { page } = f;
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.locator('[data-exh-fallback]').click();
-    await page.screenshot({ path: 'tests/settings-desktop.png' });
+    await page.screenshot({ path: 'tests/output/settings-desktop.png' });
     const waiting = page.waitForEvent('download');
     await page.locator('[data-exh-action="export"]').click();
     const download = await waiting;
     const backup = JSON.parse(fs.readFileSync(await download.path(), 'utf8'));
     assert.equal(backup.format, 'exhloj'); assert.equal(backup.schemaVersion, 1);
     await page.setViewportSize({ width: 400, height: 800 });
-    await page.screenshot({ path: 'tests/settings-mobile.png' });
+    await page.screenshot({ path: 'tests/output/settings-mobile.png' });
     const bounds = await page.locator('#exhloj-local-dialog').boundingBox();
     assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 400);
     assert.ok(bounds.y >= 0 && bounds.y + bounds.height <= 800); await f.done();
@@ -1172,6 +1173,9 @@ async function check(name, work) {
     await f.page.setViewportSize({ width: 400, height: 800 }); const bounds = await f.page.locator('#exhloj-local-dialog').boundingBox(); assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 400);
     await f.page.screenshot({ path: 'tests/output/oier-quick-mobile.png' }); assert.deepEqual((await savedOIer(f)).oiers, {}); await f.done();
   });
-  fs.writeFileSync('tests/output/browser-results.json', JSON.stringify({ version: require('../package.json').version, scriptSha256: crypto.createHash('sha256').update(script).digest('hex'), browser: browser.version(), passed: checks.length, checks }, null, 2));
   console.log(`All ${checks.length} browser scenarios passed.`);
-})().catch(error => { console.error(error); process.exitCode = 1; }).finally(async () => { if (browser) await browser.close(); });
+})().catch(error => { failure = { check: activeCheck, message: error.message }; console.error(error); process.exitCode = 1; }).finally(async () => {
+  fs.writeFileSync('tests/output/browser-results.json', JSON.stringify({ version: require('../package.json').version,
+    scriptSha256: crypto.createHash('sha256').update(script).digest('hex'), browser: browser?.version(), passed: checks.length, checks, failure }, null, 2));
+  if (browser) await browser.close();
+});

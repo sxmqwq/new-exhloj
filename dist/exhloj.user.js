@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Extend HLOJ
 // @namespace    exhloj-local
-// @version      2.5.2
+// @version      2.5.3
 // @description  core/ui/captcha/remote-problem/contest-helper/juan-monitor/user；本地重制，无旧后端依赖。
 // @author       Extend HLOJ Dev Team (original); Local restoration
 // @match        *://oj.hailiangedu.com/*
@@ -47,9 +47,9 @@
   if (!(location.hostname === 'oj.hailiangedu.com' ||
       location.host === 'www.nfls.com.cn:10611' || /(^|\.)oifha\.com$/.test(location.hostname))) return;
   if (document.documentElement.dataset.exhlojCoreUi) return;
-  document.documentElement.dataset.exhlojCoreUi = '2.5.2';
+  document.documentElement.dataset.exhlojCoreUi = '2.5.3';
 
-  const VERSION = '2.5.2';
+  const VERSION = '2.5.3';
   const SETTINGS_KEY = 'exhloj.coreui.settings.v1';
   const CACHE_KEY = 'exhloj.coreui.cache.v1';
   const CAPTCHA_KEY = 'exhloj.local.captcha.history';
@@ -375,7 +375,8 @@
     return content;
   }
 
-  let route = location.href, routeEpoch = 0, contextBody = {}, pageRequest, lastPageError = '';
+  let route = location.href, routeOwner = String(user()._id || 0), routeName = pageName();
+  let routeEpoch = 0, contextBody = {}, pageRequest, lastPageError = '';
   function current(name) { return contextBody[name] ?? ui()[name]; }
   async function requestJSON(path = location.href, options = {}) {
     const url = new URL(path, location.href);
@@ -385,8 +386,10 @@
     if (options.signal?.aborted) cancel();
     options.signal?.addEventListener('abort', cancel, { once: true });
     try {
-      const response = await fetch(url.href, { credentials: 'same-origin', redirect: 'error', cache: 'no-store',
-        ...options, signal: abort.signal, headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest', ...options.headers } });
+      const response = await fetch(url.href, { ...options, credentials: 'same-origin', redirect: 'error', cache: 'no-store',
+        signal: abort.signal, headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest', ...options.headers } });
+      if (response.status === 401) throw new Error('OJ 接口返回 HTTP 401；请在原站确认登录状态后重试');
+      if (response.status === 403) throw new Error('OJ 接口返回 HTTP 403；请确认当前账号的页面访问权限');
       if (!response.ok) throw new Error(`OJ 接口返回 HTTP ${response.status}`);
       const body = await response.json();
       if (!isObject(body) || body.error) throw new Error(body.error?.message || 'OJ 返回了无效页面数据');
@@ -398,12 +401,22 @@
     } finally { clearTimeout(timer); options.signal?.removeEventListener('abort', cancel); }
   }
   async function loadPage() {
+    // 点击可能早于 120 ms 的 DOM 刷新；先同步上下文，避免复用上一页面或账号的请求。
+    syncPageContext();
     if (!pageRequest) {
-      const epoch = routeEpoch;
-      pageRequest = requestJSON().then(body => {
-        if (epoch !== routeEpoch) throw new Error('页面已切换，请在新页面重试');
+      const epoch = routeEpoch, address = route, owner = routeOwner, name = routeName;
+      const stillCurrent = () => epoch === routeEpoch && address === location.href &&
+        owner === String(user()._id || 0) && name === pageName();
+      const request = requestJSON(address).then(body => {
+        if (!stillCurrent()) throw new Error('页面或账号已切换，请在新页面重试');
         contextBody = body; lastPageError = ''; return body;
-      }).catch(error => { if (epoch === routeEpoch) lastPageError = error.message; throw error; });
+      }).catch(error => {
+        if (stillCurrent()) lastPageError = error.message;
+        // 只释放自己的失败请求；用户可再次点击，不增加后台重试或清理站点会话。
+        if (pageRequest === request) pageRequest = undefined;
+        throw error;
+      });
+      pageRequest = request;
     }
     return pageRequest;
   }
@@ -3222,9 +3235,13 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
     }
   });
 
-  function refresh() {
-    if (location.href !== route) {
-      route = location.href; routeEpoch++; contextBody = {}; pageRequest = undefined;
+  function syncPageContext() {
+    const owner = String(user()._id || 0), name = pageName();
+    if (location.href !== route || owner !== routeOwner || name !== routeName) {
+      const accountChanged = owner !== routeOwner;
+      route = location.href; routeOwner = owner; routeName = name;
+      routeEpoch++; contextBody = {}; pageRequest = undefined;
+      if (accountChanged) for (const job of workJobs.values()) job.controller.abort();
       if (workJobs.get('oier')?.quick) workJobs.get('oier').controller.abort();
       oierQuickQueue = undefined;
       lastPageError = ''; homeworkStarted = recordStarted = solutionStarted = false;
@@ -3232,6 +3249,9 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
       lastEvents.delete('homework_detail.prepare'); lastEvents.delete('record_detail.prepare');
       for (const id of ['exhloj-local-problem-tools', 'exhloj-local-homework-files', 'exhloj-local-avatar', 'exhloj-local-permissions', 'exhloj-local-remote', 'exhloj-local-origin-code', 'exhloj-contest-tools', 'exhloj-local-user-card']) $(`#${id}`)?.remove();
     }
+  }
+  function refresh() {
+    syncPageContext();
     document.documentElement.classList.toggle('exhloj-local-rounded', enabled('rounded'));
     document.documentElement.classList.toggle('exhloj-local-ui', settings.ui);
     installMenu();

@@ -1,0 +1,44 @@
+name: Publish versioned release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  checks:
+    uses: ./.github/workflows/test.yml
+  publish:
+    needs: checks
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: '.node-version'
+      - name: Validate the selected tag
+        run: |
+          VERSION=$(node -p 'require("./package.json").version')
+          test "$GITHUB_REF_TYPE" = tag
+          test "$GITHUB_REF_NAME" = "v$VERSION"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+      - name: Download the checked installation and source packages
+        run: |
+          gh run download "$GITHUB_RUN_ID" --name "exhloj-$VERSION-install" --dir artifacts
+          gh run download "$GITHUB_RUN_ID" --name "exhloj-$VERSION-source" --dir source-artifact
+          cmp artifacts/SHA256SUMS source-artifact/SHA256SUMS
+          cp "source-artifact/exhloj-$VERSION-source.zip" artifacts/
+      - name: Verify files and publish
+        working-directory: artifacts
+        run: |
+          sha256sum --check SHA256SUMS
+          gh release create "$GITHUB_REF_NAME" --verify-tag --title "Extend HLOJ $VERSION" --generate-notes \
+            "exhloj-$VERSION.user.js" "exhloj-$VERSION-install.zip" "exhloj-$VERSION-source.zip" VERSION.txt SHA256SUMS
