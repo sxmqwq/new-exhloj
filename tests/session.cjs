@@ -163,6 +163,16 @@ async function check(name, fn) {
         release(); await f.page.waitForSelector('#exhloj-local-toast[data-error="true"]');
         assert.deepEqual(await f.page.evaluate(() => window.__clipboard), []);
         faults.clear(); await copy(f); await copied(f, `Statement /d/test/p/${change === 'route' ? 4 : 1}`);
+        // A successful cached response also expires before the debounced DOM observer runs.
+        const count = apiCount();
+        await f.page.evaluate(change => {
+          if (change === 'route') history.replaceState({}, '', '/d/test/p/5');
+          else UserContext = { _id: 100 };
+          document.querySelector('[data-exh-action="problem-copy"]').click();
+        }, change);
+        await f.page.waitForFunction(() => window.__clipboard.length === 2);
+        assert.equal(apiCount(), count + 1, 'A cached successful response must not cross page or account changes');
+        await copied(f, `Statement /d/test/p/${change === 'route' ? 5 : 1}`);
       } finally { release?.(); await f.done(); }
     }
   });

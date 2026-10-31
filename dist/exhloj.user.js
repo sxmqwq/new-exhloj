@@ -377,7 +377,7 @@
 
   let route = location.href, routeOwner = String(user()._id || 0), routeName = pageName();
   let routeEpoch = 0, contextBody = {}, pageRequest, lastPageError = '';
-  function current(name) { return contextBody[name] ?? ui()[name]; }
+  function current(name) { syncPageContext(); return contextBody[name] ?? ui()[name]; }
   async function requestJSON(path = location.href, options = {}) {
     const url = new URL(path, location.href);
     if (url.origin !== location.origin) throw new Error('只允许请求当前 OJ');
