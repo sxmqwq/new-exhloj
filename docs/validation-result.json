@@ -1,7 +1,7 @@
 {
-  "version": "2.5.2",
-  "scriptSha256": "63d5ee22d6c26ebc7df99f51272e10edda93a9bd3ba1198fd6f66e0d2d62b4ee",
-  "browser": "153.0.8010.0",
+  "version": "2.5.3",
+  "scriptSha256": "bc39d8ee801d83db2a889c0f29550eb1370e83b051ce589ffd7981a0b6efd477",
+  "node": "v24.22.1",
   "passed": 89,
   "checks": [
     "core: guest fallback, lazy user menu, deduplication, no automatic writes/requests",
@@ -93,5 +93,33 @@
     "oier: quick full pinyin verifies whole name readings instead of unrelated shared initials",
     "oier: quick full pinyin supports polyphonic characters without relying on one initials spelling",
     "oier: quick small candidate choice and expansion survive pagination and fit the dialog"
-  ]
+  ],
+  "session": {
+    "passed": 5,
+    "checks": [
+      "session: full navigation and plugin controls preserve the HttpOnly session",
+      "session: PJAX and back navigation keep the account and use the new page data",
+      "session: failed page JSON can be retried manually on the same page without polling",
+      "session: 401, 403, HTML login responses and redirects do not log out or trigger retry loops",
+      "session: late responses cannot cross a route or account change before DOM refresh"
+    ],
+    "fixture": "Local HTTP server with real HttpOnly cookies; no live OJ account"
+  },
+  "packaging": {
+    "passed": 3,
+    "checks": [
+      "test_complete_reproducible_archive_includes_workflows_and_current_release",
+      "test_missing_workflow_is_rejected",
+      "test_stale_source_and_staged_installation_are_rejected"
+    ]
+  },
+  "totalPassed": 97,
+  "ciRun": "https://github.com/sxmqwq/new-exhloj/actions/runs/41162298066",
+  "verifiedCommit": "d5801f7079fc62c4569ec92b55cb1bbf474ce946",
+  "liveSiteLoginVerified": false,
+  "limitations": [
+    "Real HLOJ/Hydro login sessions and the Tampermonkey sandbox have not been tested.",
+    "The version-tag release workflow is configured but no GitHub Release has been published."
+  ],
+  "browser": "151.0.7922.34"
 }

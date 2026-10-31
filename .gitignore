@@ -1,4 +1,7 @@
 node_modules/
+artifacts/
+__pycache__/
+*.pyc
 tests/output/*
 !tests/output/.gitkeep
 playwright-report/

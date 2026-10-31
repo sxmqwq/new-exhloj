@@ -1,6 +1,6 @@
 # Extend HLOJ
 
-Extend HLOJ 的本地重制版，当前版本 **2.5.2**。安装在 Tampermonkey 中，增强 HLOJ / 部分 Hydro 页面的训练体验。
+Extend HLOJ 的本地重制版，当前版本 **2.5.3**。安装在 Tampermonkey 中，增强 HLOJ / 部分 Hydro 页面的训练体验。
 
 本版保留原脚本的作者信息，恢复了以下七个模块，不依赖原插件的共享后端。
 
@@ -21,7 +21,15 @@ Extend HLOJ 的本地重制版，当前版本 **2.5.2**。安装在 Tampermonkey
 3. 升级已有版本时，推荐直接在原脚本的编辑器中替换全文，以保留设置和缓存。作为新脚本安装时，先停用旧脚本，再按需导入旧版 JSON 备份。
 4. 刷新 OJ，在用户菜单或右下角 **Extend HLOJ** 按钮打开设置。
 
-现成的安装包位于 [`release/exhloj-2.5.2.zip`](release/exhloj-2.5.2.zip)，其中包含脚本、安装说明、版本信息和第三方许可证。
+现成的安装包位于 [`release/exhloj-2.5.3.zip`](release/exhloj-2.5.3.zip)，其中包含脚本、安装说明、版本信息和第三方许可证。`release/exhloj-2.4.0.zip` 等旧包仅供历史版本使用。
+
+| 需要做什么 | 下载内容 |
+| --- | --- |
+| 安装或升级油猴脚本 | `dist/exhloj.user.js`，或当前版本的 `*-install.zip` |
+| 修改源码或重新上传整个仓库 | `*-source.zip`，解压后文件位于包根目录，包含 `.github`、源码、构建器、测试和当前安装包 |
+| 排查检查失败 | Actions 中的 `exhloj-test-results`，包含测试报告与截图 |
+
+Actions 将当前版本的安装文件与源码分别上传为 `exhloj-<版本>-install` 和 `exhloj-<版本>-source`；GitHub 下载的 artifact ZIP 是外层容器，解开后再使用其中对应的 ZIP。源码包不包含 `node_modules`、测试输出、Git 凭据或历史安装包。`SHA256SUMS` 覆盖当前版本的全部发布文件。
 
 完整使用说明见 [`docs/INSTALL.zh-CN.txt`](docs/INSTALL.zh-CN.txt)。本仓库没有预设 GitHub 用户名，也没有自动更新地址；发布到自己的仓库后，可按需要自行配置。
 
@@ -63,7 +71,7 @@ Extend HLOJ 的本地重制版，当前版本 **2.5.2**。安装在 Tampermonkey
 
 ## 开发
 
-建议 Node.js 22 或更新版本；本包用 Node.js 24 验证。安装包生成脚本另需 Python 3。
+开发和 CI 统一使用 Node.js 24（见 `.node-version`），要求 Node.js >=24。打包与包结构检查另需 Python 3。
 
 ```bash
 npm ci --ignore-scripts
@@ -94,9 +102,13 @@ npm test
 ```bash
 npm run package
 npm run package:check
+npm run package:source
+npm run package:source:check
 ```
 
 输出为 `release/exhloj-<版本>.zip`，并更新 `VERSION.txt` 与 `SHA256SUMS`。调整版本时需要同时修改 `package.json` 与源码模板中的三个版本位置，构建器会检查一致性。
+
+`package:source` 先只读检查安装包，再在 `artifacts/` 生成有明确 `-install` / `-source` 后缀的发布文件和校验值，不需要 Git 元数据。`package:source:check` 检查源码包内容和暂存文件，遗漏 `.github` 或文件过期都会失败。
 
 `package:check` 只读核对当前安装包内的脚本、说明、许可证、版本及 SHA-256，CI 在重新生成安装包前运行它，防止把仓库中过期的 ZIP 掩盖掉。固定 ZIP 时间戳使同一环境重复打包得到相同文件。升级版本时也要同步 `package-lock.json` 的项目版本和安装说明首行。
 
@@ -104,9 +116,11 @@ npm run package:check
 
 ## 验证
 
-当前 **89 组 Chromium 浏览器场景通过**，覆盖七个模块及 OIerDb 的 24 条获奖记录示例。测试拦截页面和接口请求，使用固定响应，不需要 OJ 账号。测试输出在 `tests/output/`。
+检查包括 **89 组模拟页面浏览器场景、5 组本地 HTTP 会话场景和 3 组包结构检查**。前者覆盖七个模块及 OIerDb 的 24 条获奖记录示例；会话检查使用真实 HttpOnly Cookie、本地登录重定向、普通跳转和 PJAX，不拦截模拟 OJ 的 fetch 响应。全部检查均不需要真实 OJ 账号，输出在 `tests/output/`。
 
 验证记录见 [`docs/validation-result.json`](docs/validation-result.json)。这些检查不代表已经完成 HLOJ 登录态实测；站点特有模板或权限差异仍可能影响实际效果。
+
+切换页面后出现登录异常时，按 [`docs/SESSION.zh-CN.md`](docs/SESSION.zh-CN.md) 做对照定位。2.5.3 修复同页请求失败后无法重试、旧响应跨页面或账号进入缓存的问题；不清理站点 Cookie，也不将权限错误当作退出登录。
 
 仓库包含 `.github/workflows/test.yml`，在 push、PR 或手动触发时构建并运行浏览器检查。
 
@@ -114,7 +128,9 @@ npm run package:check
 
 解压后，将目录内的文件上传到你的仓库根目录，包括 `.github`、`.gitignore` 和 `.gitattributes`。源码、构建产物、说明和测试已分开整理。
 
-创建 GitHub Release 时，可以上传 `release/exhloj-2.5.2.zip` 和 `dist/exhloj.user.js`。更改功能后先构建、测试，再生成对应版本的安装包。
+推送与 `package.json` 一致的版本标签（如 `v2.5.3`）后，`release.yml` 先复用完整检查，再发布带版本的脚本、安装包、源码包及校验值。手动运行发布工作流时也必须选择对应标签；分支或不匹配的标签会被拒绝。相同版本的既有 Release 不会被覆盖。
+
+更改功能后先构建、生成并提交新安装包，再运行检查与完整测试。发布工作流不会在分支 push 或 PR 时发布 Release。
 
 ## 来源与许可证说明
 

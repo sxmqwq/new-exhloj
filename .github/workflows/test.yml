@@ -3,6 +3,7 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+  workflow_call:
 permissions:
   contents: read
 jobs:
@@ -11,20 +12,41 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v5
         with:
-          node-version: '24'
+          node-version-file: '.node-version'
       - run: npm ci --ignore-scripts
       - run: npx playwright install --with-deps chromium
       - run: npm run check
       - run: npm run package:check
       - run: npm test
-      - run: npm run package
+      - run: npm run package:source
+      - run: npm run package:source:check
+      - id: version
+        run: |
+          VERSION=$(node -p 'require("./package.json").version')
+          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v6
+        with:
+          name: exhloj-${{ steps.version.outputs.value }}-install
+          if-no-files-found: error
+          path: |
+            artifacts/exhloj-${{ steps.version.outputs.value }}-install.zip
+            artifacts/exhloj-${{ steps.version.outputs.value }}.user.js
+            artifacts/VERSION.txt
+            artifacts/SHA256SUMS
+      - uses: actions/upload-artifact@v6
+        with:
+          name: exhloj-${{ steps.version.outputs.value }}-source
+          if-no-files-found: error
+          path: |
+            artifacts/exhloj-${{ steps.version.outputs.value }}-source.zip
+            artifacts/SHA256SUMS
       - uses: actions/upload-artifact@v6
         if: always()
         with:
-          name: exhloj-build-and-test
-          path: |
-            dist/exhloj.user.js
-            release/*.zip
-            tests/output/browser-results.json
+          name: exhloj-test-results
+          if-no-files-found: warn
+          path: tests/output/
