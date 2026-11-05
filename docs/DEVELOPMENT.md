@@ -37,7 +37,10 @@
 - `loadOIerDatabase`、`readOIerProfiles`：读取 OIerDb 官方版本化静态数据，按 UID 解析选手与获奖记录。
 - `fillUserFromOIerLink`、`refreshOIerUsers`：链接预览与保存、单人/批量刷新；使用任务取消与账号检查，提交前重读本地资料并检查绑定。
 - `profilePanelTarget`：定位主页最外层侧栏。
-- `calculateUserRatings`：本地比赛结算。
+- `calculateUserRatings`：默认从既有记录恢复当前分数，只结算未保存的组并追加；`contests` 同时充当已结算集合（包括并行组未选中的比赛），新写入只包含被引用的定义。旧版所有定义保守视为已结算，不迁移或丢弃旧记录。
+- `rateCurrentContest` / `ratingToolbar`：比赛页自动追加同格式命令，复用已有定义；独立于 contest-helper。
+- `scanRatingTimeline` / `selectedRatingTimeline`：完整分页读取后按本地日期生成预览，记录账号、页面版本、范围和 Rating 快照；用户勾选后才调用 `calculateUserRatings` 的 `restart` 分支，成功时整体提交。手动命令入口始终增量结算。
+- `checkJob`：Rating 任务额外绑定页面版本，导航或账号切换时取消；保存前还核对可见命令输入框和时间轴选择，避免异步返回覆盖新输入。
 - 最后的点击事件委托和 `refresh`：界面动作与动态页面刷新。
 
 ## 构建与版本

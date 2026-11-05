@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Extend HLOJ
 // @namespace    exhloj-local
-// @version      2.5.4
+// @version      2.6.0
 // @description  core/ui/captcha/remote-problem/contest-helper/juan-monitor/user；本地重制，无旧后端依赖。
 // @author       Extend HLOJ Dev Team (original); Local restoration
 // @match        *://oj.hailiangedu.com/*
@@ -47,9 +47,9 @@
   if (!(location.hostname === 'oj.hailiangedu.com' ||
       location.host === 'www.nfls.com.cn:10611' || /(^|\.)oifha\.com$/.test(location.hostname))) return;
   if (document.documentElement.dataset.exhlojCoreUi) return;
-  document.documentElement.dataset.exhlojCoreUi = '2.5.4';
+  document.documentElement.dataset.exhlojCoreUi = '2.6.0';
 
-  const VERSION = '2.5.4';
+  const VERSION = '2.6.0';
   const SETTINGS_KEY = 'exhloj.coreui.settings.v1';
   const CACHE_KEY = 'exhloj.coreui.cache.v1';
   const CAPTCHA_KEY = 'exhloj.local.captcha.history';
@@ -1519,6 +1519,7 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
   function checkJob(job, requesting = false) {
     if (job.controller.signal.aborted) throw workError('任务已取消');
     if (job.owner !== +user()._id) throw workError('登录账号已变化，任务停止');
+    if (job.kind === 'user' && job.epoch !== routeEpoch) throw workError('页面已变化，请重新开始结算');
     if (requesting && job.count >= job.limit) throw workError(`达到 ${job.limit} 次请求上限；本次结果不完整`, true);
   }
   function pauseWork(ms, signal) {
@@ -1574,7 +1575,7 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
     if (workJobs.has(kind)) throw workError('此模块已有任务运行，请等待或取消');
     if (!local && !(+user()._id > 0)) throw workError('请先登录 OJ');
     const state = workStates[kind], job = { kind, count: 0, limit: settings.helperRequestLimit,
-      delay: settings.helperDelay, owner: +user()._id, controller: new AbortController() };
+      delay: settings.helperDelay, owner: +user()._id, epoch: routeEpoch, controller: new AbortController() };
     workJobs.set(kind, job); Object.assign(state, { kind, job, running: true, status: '', message: '', errors: [] }); updateWorkProgress(kind);
     try { return await fn(job, state); }
     catch (error) {
@@ -2172,7 +2173,7 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
   function refreshUserModule() {
     if (!settings.userModule) { workJobs.get('user')?.controller.abort(); workJobs.get('oier')?.controller.abort(); }
     try { if (page.UiContext?.exhloj) { if (settings.userModule) page.UiContext.exhloj.user = localUserAPI; else delete page.UiContext.exhloj.user; } } catch {}
-    refreshUserProfile(); refreshUserScoreboards(); refreshUserNames();
+    refreshUserProfile(); refreshUserScoreboards(); refreshUserNames(); ratingToolbar();
   }
   function userToolBody(title) { if (!settings.userModule) throw workError('请先启用 user 模块'); return modal(title); }
   function openUserTools() {
@@ -2184,7 +2185,7 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
     const ccf = el('input', { name: 'ccf', type: 'checkbox' }); ccf.checked = settings.userCCF; const ccfLabel = el('label'); ccfLabel.append(ccf, '显示本地 CCF 评级标记'); form.append(ccfLabel, button('保存显示设置', 'user-options-save')); body.append(form);
     body.append(el('p', {}, `${Object.keys(store.users.oiers).length} 份资料，${store.ratings.contests.length} 场比赛，${store.ratings.records.length} 条 Rating 记录。`));
     const uidLabel = el('label', {}, '编辑用户 ID '); uidLabel.append(el('input', { type: 'number', min: 1, step: 1, id: 'exhloj-user-id', value: userProfileId() || +user()._id || 1 })); body.append(uidLabel, button('编辑资料', 'user-edit'), button('查看 Rating 历史', 'user-history'));
-    body.append(button('Rating 排行榜', 'user-ranking'), button('Rated 比赛与结算', 'user-rated'), button('资料 JSON 导入 / 编辑', 'user-json'), button('导出用户数据', 'user-export'), button('从卷王统计更新题目分', 'user-practice'));
+    body.append(button('Rating 排行榜', 'user-ranking'), button('Rated 比赛与结算', 'user-rated'), button('时间轴结算', 'user-timeline'), button('资料 JSON 导入 / 编辑', 'user-json'), button('导出用户数据', 'user-export'), button('从卷王统计更新题目分', 'user-practice'));
     const bindings = el('details', { open: '' }); bindings.append(el('summary', {}, '已绑定的 OIerDb 资料'), el('div', { id: 'exhloj-user-oier-bindings', class: 'exhloj-work-results' }), button('刷新全部 OIerDb 资料', 'user-oier-refresh-all'));
     body.append(button('OIerDb 快捷导入', 'user-oier-quick-open'), bindings); workProgress(body, 'oier'); renderOIerBindings();
   }
@@ -2650,14 +2651,121 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
     if (strict) throw workError('Rated 比赛格式应为 域ID/比赛ID'); return '';
   }
   function openUserRated() {
-    const body = userToolBody('Rated 比赛 · 本地结算'), area = el('textarea', { id: 'exhloj-user-commands', spellcheck: 'false' }); area.value = userStore().ratings.commands;
-    body.append(el('p', {}, '每次结算都从 1800 重新计算当前命令中的完整历史，成功后整体替换原 Rating 记录。新增比赛时，请保留原命令并在末尾追加；相同 rating 行中的多场比赛并行计算，对每人采用加权变化最大的场次。'),
+    const body = userToolBody('Rated 比赛 · 本地结算'), area = el('textarea', { id: 'exhloj-user-commands', spellcheck: 'false' }), { ratings } = userStore(); area.value = ratings.commands;
+    body.append(el('p', { id: 'exhloj-rating-summary' }, ratingSummary()),
+      el('p', {}, '普通结算沿用已保存的分数和历史，只追加新比赛；已结算的比赛自动跳过。比赛页可直接加入并结算。需要重新开始时，使用时间轴结算。'),
+      button('时间轴结算', 'user-timeline'), button('Rating 排行榜', 'user-ranking'),
       el('pre', {}, 'version:2\ncontest:域ID/比赛ID,比赛标题,1\nrating:域ID/比赛ID'),
       el('p', {}, 'version:1 只结算正分选手；version:2 结算所有有提交且有排名的选手。权重范围 0–10。contest 行可在第四项附上 [[UID,排名],...]，使用已有名次时无需读取 OJ。# 开头的行是注释。'), area,
-      button('保存命令草稿', 'user-commands-save'), button('读取榜单并结算到本地', 'user-calculate'), button('导出用户数据', 'user-export'));
+      button('保存命令草稿', 'user-commands-save'), button('结算新增比赛并保存', 'user-calculate'), button('导出用户数据', 'user-export'));
     workProgress(body, 'user'); showWorkErrors(workStates.user);
   }
-  function parseRatedCommands(text) {
+  function ratingSummary() {
+    const { ratings } = userStore(); return `已保存 ${ratings.contests.length} 场比赛、${ratings.records.length} 条 Rating 记录。`;
+  }
+  function ratingToolbar() {
+    if (!settings.userModule || !['contest_detail', 'contest_scoreboard', 'contest_main'].includes(pageName())) { $('#exhloj-rating-tools')?.remove(); return; }
+    if ($('#exhloj-rating-tools') || !mainColumn()) return;
+    const tools = el('div', { id: 'exhloj-rating-tools', class: 'exhloj-local-toolbar' });
+    if (pageName() !== 'contest_main' && ratedContestPath(`${contestContext().domain}/${contestContext().id}`, false)) tools.append(button('加入 Rating 并结算', 'user-rate-current'));
+    tools.append(button('时间轴结算', 'user-timeline'), button('Rating 记录与命令', 'user-rated')); mainColumn().prepend(tools);
+  }
+  function ratedCommandTitle(title) { return String(title || '').replace(/[,\r\n]/g, ' ').slice(0, 250); }
+  function ratedCommand(id, title, weight = 1, version = 2) {
+    return `version:${version}\ncontest:${id},${ratedCommandTitle(title)},${weight}\nrating:${id}`;
+  }
+  async function rateCurrentContest() {
+    if (!['contest_detail', 'contest_scoreboard'].includes(pageName())) throw workError('请在比赛详情或榜单页操作');
+    const context = contestContext(), id = `${context.domain}/${context.id}`; ratedContestPath(id);
+    const doc = current('tdoc'), sameDoc = String(doc?.docId || doc?._id || '') === context.id;
+    if (sameDoc && new Date(doc.endAt).getTime() > Date.now()) throw workError('比赛尚未结束，请结束后再结算');
+    const { ratings } = userStore();
+    if (ratings.contests.some(row => row[0] === id)) { openUserRated(); notify('这场比赛已结算，已保留原记录'); return; }
+    let text = ratings.commands.trim(), plan = text && !text.split(/\r?\n/).every(line => !line.trim() || line.trim().startsWith('#')) ? parseRatedCommands(text, true) : { contests: [], groups: [] };
+    const index = plan.contests.findIndex(row => row.id === id);
+    if (index < 0) text += `${text ? '\n' : ''}${ratedCommand(id, sameDoc ? doc.title : context.id)}`;
+    else if (!plan.groups.some(group => group.includes(index))) text += `\nrating:${id}`;
+    openUserRated(); $('#exhloj-user-commands').value = text;
+    await calculateUserRatings(text);
+  }
+  let ratingTimeline;
+  function localDateInput(date) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`; }
+  function openRatingTimeline() {
+    ratingTimeline = undefined;
+    const body = userToolBody('时间轴结算'), form = el('form', { id: 'exhloj-rating-timeline-form' }), today = new Date(), from = new Date(today); from.setDate(from.getDate() - 30);
+    body.append(el('p', {}, ratingSummary()), el('p', {}, '按比赛开始日期筛选已结束的比赛，日期包含首尾两天，使用当前浏览器时区。勾选后按开始时间从早到晚结算，每场独立更新一次。'),
+      el('p', {}, '从 1800 重新开始；全部成功后，用所选比赛替换当前全部 Rating 历史。未勾选的比赛不保留。失败或取消时保留原数据。'));
+    for (const [name, title, type, value] of [['domain', '域 ID', 'text', domainId()], ['from', '开始日期', 'date', localDateInput(from)], ['to', '结束日期', 'date', localDateInput(today)]]) {
+      const label = el('label', {}, title + ' '); label.append(el('input', { name, type, value, required: true })); form.append(label);
+    }
+    const weight = el('label', {}, '比赛权重 '); weight.append(el('input', { type: 'number', name: 'weight', min: 0, max: 10, step: 0.1, value: 1 })); form.append(weight);
+    const label = el('label', {}, '参赛选手 '), version = el('select', { name: 'version' }); version.append(el('option', { value: '2' }, '有提交且有名次'), el('option', { value: '1' }, '有正分成绩')); label.append(version); form.append(label);
+    body.append(form, button('读取时间范围内的比赛', 'user-timeline-scan'),
+      el('div', { id: 'exhloj-rating-timeline-results', class: 'exhloj-work-results' }),
+      button('全选', 'user-timeline-select', { 'data-checked': 'true' }), button('全不选', 'user-timeline-select', { 'data-checked': 'false' }),
+      button('从 1800 重新结算所选比赛', 'user-timeline-calculate', { disabled: '' }), button('导出当前用户数据', 'user-export'));
+    workProgress(body, 'user');
+  }
+  function ratingTimelineRange() {
+    const form = $('#exhloj-rating-timeline-form'); if (!form) throw workError('请重新打开时间轴');
+    const domains = domainList(form.elements.domain.value);
+    if (domains.length !== 1) throw workError('请填写一个域 ID');
+    const from = form.elements.from.value, to = form.elements.to.value;
+    const start = new Date(`${from}T00:00:00`), end = new Date(`${to}T00:00:00`); end.setDate(end.getDate() + 1);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || !Number.isFinite(+start) || !Number.isFinite(+end) || +start >= +end) throw workError('请选择有效的起止日期，结束日期不能早于开始日期');
+    return { domain: domains[0], from, to, start: +start, end: +end };
+  }
+  async function scanRatingTimeline() {
+    const range = ratingTimelineRange(), form = $('#exhloj-rating-timeline-form'), box = $('#exhloj-rating-timeline-results');
+    ratingTimeline = undefined; box.replaceChildren(); $('[data-exh-action="user-timeline-calculate"]').disabled = true;
+    await runWork('user', async (job, state) => {
+      const docs = await listPages(job, `/d/${seg(range.domain)}/contest`, 'tdocs'), rows = [], seen = new Set();
+      for (let doc of docs) {
+        const id = `${range.domain}/${doc.docId || doc._id || ''}`; ratedContestPath(id); if (seen.has(id)) continue; seen.add(id);
+        let begin = Date.parse(doc.beginAt), end = Date.parse(doc.endAt);
+        if (Number.isFinite(begin) && (begin < range.start || begin >= range.end)) continue;
+        if (!Number.isFinite(begin) || !Number.isFinite(end)) {
+          doc = (await jobJSON(job, ratedContestPath(id))).tdoc;
+          begin = Date.parse(doc?.beginAt); end = Date.parse(doc?.endAt);
+        }
+        if (!Number.isFinite(begin) || !Number.isFinite(end) || end < begin) throw workError(`无法读取 ${id} 的比赛时间，请稍后重试`);
+        if (begin < range.start || begin >= range.end || end > Date.now()) continue;
+        rows.push({ id, title: localText(doc.title, 250) || id, begin, end });
+      }
+      checkJob(job);
+      if (!form.isConnected || JSON.stringify(ratingTimelineRange()) !== JSON.stringify(range)) throw workError('时间范围已变化，请重新读取');
+      rows.sort((a, b) => a.begin - b.begin || a.id.localeCompare(b.id));
+      ratingTimeline = { range, rows, owner: job.owner, epoch: job.epoch, baseline: JSON.stringify(userStore().ratings) };
+      const table = el('table'), head = el('tr'); for (const text of ['选择', '开始时间', '比赛', '状态']) head.append(el('th', {}, text)); table.append(head);
+      const saved = new Set(userStore().ratings.contests.map(row => row[0]));
+      for (const row of rows) {
+        const tr = el('tr'), cell = el('td'), input = el('input', { type: 'checkbox', 'data-rating-id': row.id, 'aria-label': row.title }); input.checked = true; cell.append(input);
+        const title = el('td'); title.append(el('a', { href: ratedContestPath(row.id), target: '_blank', rel: 'noopener noreferrer' }, row.title));
+        tr.append(cell, el('td', {}, new Date(row.begin).toLocaleString()), title, el('td', {}, saved.has(row.id) ? '已结算，将重算' : '未结算')); table.append(tr);
+      }
+      box.replaceChildren(el('p', {}, `共 ${rows.length} 场已结束比赛；一次最多选择 200 场。`), table);
+      $('[data-exh-action="user-timeline-calculate"]').disabled = !rows.length;
+      state.message = `已读取 ${rows.length} 场比赛，请勾选后结算`;
+    });
+  }
+  function selectedRatingTimeline() {
+    const scan = ratingTimeline;
+    if (!scan || scan.owner !== +user()._id || scan.epoch !== routeEpoch || JSON.stringify(scan.range) !== JSON.stringify(ratingTimelineRange())) throw workError('比赛列表已过期，请重新读取时间范围');
+    if (scan.baseline !== JSON.stringify(userStore().ratings)) throw workError('本地 Rating 数据或命令草稿已变化，请重新读取后核对');
+    const selected = new Set($$('[data-rating-id]:checked').map(input => input.dataset.ratingId)), rows = scan.rows.filter(row => selected.has(row.id));
+    if (!rows.length || rows.length > 200) throw workError('请选择 1–200 场比赛');
+    const form = $('#exhloj-rating-timeline-form'), weight = localNumber(form.elements.weight.value, 'Rating 权重', 0, 10), version = +form.elements.version.value;
+    if (![1, 2].includes(version)) throw workError('参赛选手筛选方式无效');
+    return rows.map(row => ratedCommand(row.id, row.title, weight, version)).join('\n');
+  }
+  async function calculateRatingTimeline() {
+    const text = selectedRatingTimeline();
+    await calculateUserRatings(text, { restart: true, verify: () => {
+      if (selectedRatingTimeline() !== text) throw workError('所选比赛或参数已变化，请重新结算');
+    } });
+    if (!workStates.user.errors?.length) ratingTimeline = undefined;
+  }
+  function parseRatedCommands(text, allowDraft = false) {
     const contests = [], groups = [], ids = new Map(); let version = 1;
     for (const [offset, raw] of String(text).split(/\r?\n/).entries()) {
       const line = raw.trim(); if (!line || line.startsWith('#')) continue;
@@ -2675,7 +2783,7 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
         } else throw workError('未知命令');
       } catch (error) { throw workError(`第 ${offset + 1} 行：${error.message}`); }
     }
-    if (!contests.length || !groups.length) throw workError('请至少定义一场比赛及一条 rating 结算命令');
+    if (!allowDraft && (!contests.length || !groups.length)) throw workError('请至少定义一场比赛及一条 rating 结算命令');
     if (contests.length > 200) throw workError('一次至多结算 200 场比赛');
     const used = groups.flat(); if (new Set(used).size !== used.length) throw workError('同一比赛不能重复结算'); return { contests, groups };
   }
@@ -2698,14 +2806,27 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
     }
     return validateRatedUsers(result);
   }
-  async function calculateUserRatings(text) {
+  async function calculateUserRatings(text, { restart = false, verify = () => {} } = {}) {
     if (!settings.userModule) throw workError('请先启用 user 模块');
-    const plan = parseRatedCommands(text), baseline = JSON.stringify(userStore().ratings);
+    const plan = parseRatedCommands(text), original = userStore().ratings, baseline = JSON.stringify(original);
+    if (userLoadError) throw workError(`本地数据格式异常，请先修复：${userLoadError}`);
+    const saved = new Set(restart ? [] : original.contests.map(row => row[0])), allGroups = plan.groups.length;
+    plan.groups = plan.groups.filter(group => {
+      const count = group.filter(index => saved.has(plan.contests[index].id)).length;
+      if (count && count !== group.length) throw workError('同一并行结算组含有已结算和未结算的比赛，请分开结算或使用时间轴重算');
+      return !count;
+    });
+    const active = new Set(plan.groups.flat()), area = $('#exhloj-user-commands'), draft = area?.value;
+    verify();
     return runWork('user', async (job, state) => {
-      for (const contest of plan.contests) if (!contest.users) {
+      if (!plan.groups.length) { state.message = '命令中的比赛均已结算，保留原分数和历史；未重复读取榜单'; notify('没有需要新增结算的比赛'); return; }
+      for (const index of active) {
+        const contest = plan.contests[index]; if (contest.users) continue;
         const body = await jobJSON(job, ratedContestPath(contest.id) + '/scoreboard'); contest.users = ratedUsersFromBoard(body, contest.version);
       }
-      const currentRatings = new Map(), records = [], sum = values => values.reduce((a, b) => a + b, 0);
+      const contests = restart ? [] : clone(original.contests), records = restart ? [] : clone(original.records), indices = new Map();
+      const oldCount = records.length, currentRatings = new Map(records.map(row => [row[0], row[3]])), sum = values => values.reduce((a, b) => a + b, 0);
+      for (const index of active) { const row = plan.contests[index]; indices.set(index, contests.length); contests.push([row.id, row.title, row.weight]); }
       const expected = (rows, uid, rating) => sum(rows.map(other => other.uid === uid ? 1 : 1 / (1 + 10 ** ((rating - other.old) / 400))));
       const search = (rows, uid, target, left, right) => { while (right - left > 0.1) { const mid = (left + right) / 2; if (expected(rows, uid, mid) > target) left = mid; else right = mid; } return (left + right) / 2; };
       for (const [groupIndex, group] of plan.groups.entries()) {
@@ -2721,12 +2842,15 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
           }
         }
         const values = [...chosen.values()], correction = 1 - sum(values.map(row => row.diff)) / values.length;
-        for (const row of values) { const rating = row.old + Math.round((row.diff + correction) * row.weight); currentRatings.set(row.uid, rating); records.push([row.uid, row.index, row.rank, rating, row.performance]); }
+        for (const row of values) { const rating = row.old + Math.round((row.diff + correction) * row.weight); currentRatings.set(row.uid, rating); records.push([row.uid, indices.get(row.index), row.rank, rating, row.performance]); }
       }
       checkJob(job); const store = userStore();
       if (JSON.stringify(store.ratings) !== baseline) throw workError('本地 Rating 数据或命令草稿已变化，未覆盖新数据；请核对后重新结算');
-      writeUserStore(store.users, { contests: plan.contests.map(row => [row.id, row.title, row.weight]), records, commands: text });
-      state.message = `已完成本地结算：${plan.contests.length} 场比赛，${records.length} 条记录；未上传数据`; notify('Rating 已在本机结算');
+      if (area?.isConnected && area.value !== draft) throw workError('命令草稿已变化，未保存本次结果；请核对后重新结算');
+      verify();
+      writeUserStore(store.users, { contests, records, commands: text });
+      const summary = $('#exhloj-rating-summary'); if (summary) summary.textContent = ratingSummary();
+      state.message = `已${restart ? '从 1800 重新' : '追加'}结算 ${active.size} 场比赛、${records.length - oldCount} 条记录${allGroups > plan.groups.length ? `；跳过 ${allGroups - plan.groups.length} 个已结算组` : ''}。${ratingSummary()}`; notify('Rating 已在本机保存');
     }, true);
   }
   function importPracticeToUsers() {
@@ -3148,6 +3272,11 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
         case 'user-edit': openUserEditor(control.dataset.uid || $('#exhloj-user-id')?.value); break;
         case 'user-history': openUserHistory(control.dataset.uid || $('#exhloj-user-id')?.value); break;
         case 'user-ranking': openUserRanking(control.dataset.mode || 'current'); break;
+        case 'user-rate-current': await rateCurrentContest(); break;
+        case 'user-timeline': openRatingTimeline(); break;
+        case 'user-timeline-scan': await scanRatingTimeline(); break;
+        case 'user-timeline-calculate': await calculateRatingTimeline(); break;
+        case 'user-timeline-select': for (const input of $$('[data-rating-id]')) input.checked = control.dataset.checked === 'true'; break;
         case 'user-save': saveUserEditor(); break;
         case 'user-oier-quick-open': openQuickOIerImport(); break;
         case 'user-oier-quick-scan': await scanQuickOIerImport(); break;
@@ -3251,12 +3380,13 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
       route = location.href; routeOwner = owner; routeName = name;
       routeEpoch++; contextBody = {}; pageRequest = undefined;
       if (accountChanged) for (const job of workJobs.values()) job.controller.abort();
+      workJobs.get('user')?.controller.abort(); ratingTimeline = undefined;
       if (workJobs.get('oier')?.quick) workJobs.get('oier').controller.abort();
       oierQuickQueue = undefined;
       lastPageError = ''; homeworkStarted = recordStarted = solutionStarted = false;
       remoteState = undefined; remotePending = false; contestRevealed = false;
       lastEvents.delete('homework_detail.prepare'); lastEvents.delete('record_detail.prepare');
-      for (const id of ['exhloj-local-problem-tools', 'exhloj-local-homework-files', 'exhloj-local-avatar', 'exhloj-local-permissions', 'exhloj-local-remote', 'exhloj-local-origin-code', 'exhloj-contest-tools', 'exhloj-local-user-card']) $(`#${id}`)?.remove();
+      for (const id of ['exhloj-local-problem-tools', 'exhloj-local-homework-files', 'exhloj-local-avatar', 'exhloj-local-permissions', 'exhloj-local-remote', 'exhloj-local-origin-code', 'exhloj-contest-tools', 'exhloj-rating-tools', 'exhloj-local-user-card']) $(`#${id}`)?.remove();
     }
   }
   function refresh() {

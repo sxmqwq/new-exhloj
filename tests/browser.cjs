@@ -12,7 +12,7 @@ let browser, activeCheck, failure;
 const html = (name, body = '', extra = '') => `<!doctype html><html data-page="${name}"><head><meta charset="utf-8"><title>Fixture</title></head>
 <body class="page--${name}"><div class="main"><div class="row"><div class="medium-9 columns">${body}</div><div class="medium-3 columns"></div></div></div>${extra}</body></html>`;
 async function fixture(name, body, context = {}, options = {}) {
-  const page = await browser.newPage();
+  const page = await browser.newPage(options.timezoneId ? { timezoneId: options.timezoneId } : {});
   const errors = [], requests = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.route('**/*', async route => {
@@ -711,9 +711,9 @@ async function check(name, work) {
   });
   await check('user audit: a delayed Rating calculation cannot overwrite newly saved Rating data', async () => {
     const board = { rows: [[{ type: 'rank', value: '1' }, { type: 'user', raw: 7 }, { type: 'record', score: 100, raw: oid(0.1) }]], tdoc: { rule: 'oi' } };
-    const f = await fixture('homepage', '', {}, { storage: userStorage(), strictApi: true, api: { [`GET /d/test/contest/${tid}/scoreboard`]: { delay: 600, body: board } } });
+    const f = await fixture('homepage', '', {}, { storage: userStorage(), strictApi: true, api: { [`GET /d/test/contest/3/scoreboard`]: { delay: 600, body: board } } });
     await openWork(f, 'user-open'); await f.page.locator('[data-exh-action="user-rated"]').click();
-    await f.page.locator('#exhloj-user-commands').fill(`version:2\ncontest:test/${tid},Round,1\nrating:test/${tid}`);
+    await f.page.locator('#exhloj-user-commands').fill(`version:2\ncontest:test/3,Round,1\nrating:test/3`);
     await f.page.locator('[data-exh-action="user-calculate"]').click(); await f.page.waitForFunction(() => document.querySelector('[data-work-progress="user"]').textContent.includes('/scoreboard'));
     const changed = await f.page.evaluate(() => {
       const raw = window.__store['exhloj.coreui.cache.v1'], cache = typeof raw === 'string' ? JSON.parse(raw) : raw;
@@ -728,7 +728,7 @@ async function check(name, work) {
       window.__store['exhloj.coreui.cache.v1'] = JSON.stringify(cache);
     });
     await finished(f, 'user'); const retry = await f.page.evaluate(() => window.UiContext.exhloj.user.getData());
-    assert.equal(retry.ratings.records[0][3], 1801); assert.equal(retry.users.oiers[7].name, '结算期间编辑资料'); await f.done();
+    assert.equal(retry.ratings.records.at(-1)[3], 1801); assert.equal(retry.users.oiers[7].name, '结算期间编辑资料'); await f.done();
   });
 
   await check('user: ordinary and signed-out users can edit any local UID with no OJ writes', async () => {
@@ -835,9 +835,9 @@ async function check(name, work) {
   await check('user: explicit scoreboard reads, v1/v2 eligibility, zero weights and atomic denied-board failures', async () => {
     const header = [{ type: 'rank', value: '#' }, { type: 'user', value: 'User' }, { type: 'problem', raw: 1 }];
     const board = { rows: [header, [{ type: 'rank', value: '1' }, { type: 'user', raw: 7 }, { type: 'record', score: 100, raw: oid(0.1) }], [{ type: 'rank', value: '2' }, { type: 'user', raw: 8 }, { type: 'record', score: 0, raw: oid(0.1, 2) }]], tdoc: { rule: 'oi' } };
-    const f = await fixture('homepage', '', {}, { storage: userStorage({}, {}, {}), strictApi: true, api: { [`GET /d/test/contest/${tid}/scoreboard`]: { body: board }, [`GET /d/test/contest/${tid2}/scoreboard`]: { status: 403 } } });
+    const f = await fixture('homepage', '', {}, { storage: userStorage({}, {}, {}), strictApi: true, api: { 'GET /d/test/contest/1/scoreboard': { body: board }, 'GET /d/test/contest/2/scoreboard': { body: board }, [`GET /d/test/contest/${tid2}/scoreboard`]: { status: 403 } } });
     assert.equal(f.requests.length, 1); await openWork(f, 'user-open'); await f.page.locator('[data-exh-action="user-rated"]').click();
-    for (const version of [1, 2]) { await f.page.locator('#exhloj-user-commands').fill(`version:${version}\ncontest:test/${tid},Round,0\nrating:test/${tid}`); await f.page.locator('[data-exh-action="user-calculate"]').click(); await finished(f, 'user'); const data = await userData(f); assert.equal(data.ratings.records.length, version); assert.ok(data.ratings.records.every(row => row[3] === 1800)); }
+    for (const version of [1, 2]) { await f.page.locator('#exhloj-user-commands').fill(`version:${version}\ncontest:test/${version},Round,0\nrating:test/${version}`); await f.page.locator('[data-exh-action="user-calculate"]').click(); await finished(f, 'user'); const data = await userData(f); assert.equal(data.ratings.records.filter(row => row[1] === version - 1).length, version); assert.ok(data.ratings.records.every(row => row[3] === 1800)); }
     const before = await f.page.evaluate(() => window.__store['exhloj.coreui.cache.v1']); await f.page.locator('#exhloj-user-commands').fill(`contest:test/${tid2},Denied,1\nrating:test/${tid2}`); await f.page.locator('[data-exh-action="user-calculate"]').click(); await finished(f, 'user'); assert.match(await f.page.locator('[data-work-errors="user"]').textContent(), /403/); assert.equal(await f.page.evaluate(() => window.__store['exhloj.coreui.cache.v1']), before);
     assert.ok(f.requests.every(r => r.method === 'GET')); await f.done();
   });
@@ -848,10 +848,10 @@ async function check(name, work) {
     assert.deepEqual(data.ratings.records.map(row => [row[0], row[1], row[3]]), [[7, 0, 1801], [8, 1, 1801]]); assert.equal(data.users.oiers[7].name, '七号'); await f.done();
   });
   await check('user: canceling a delayed calculation preserves previous ratings and allows retry', async () => {
-    const f = await fixture('homepage', '', {}, { storage: userStorage(), strictApi: true, api: { [`GET /d/test/contest/${tid}/scoreboard`]: { delay: 2000, body: { rows: [] } } } }); await openWork(f, 'user-open'); await f.page.locator('[data-exh-action="user-rated"]').click(); const before = await userData(f);
-    await f.page.locator('#exhloj-user-commands').fill(`contest:test/${tid},A,1\nrating:test/${tid}`); await f.page.locator('[data-exh-action="user-calculate"]').click(); await f.page.waitForFunction(() => document.querySelector('[data-work-progress="user"]').textContent.includes('/scoreboard'));
+    const f = await fixture('homepage', '', {}, { storage: userStorage(), strictApi: true, api: { [`GET /d/test/contest/3/scoreboard`]: { delay: 2000, body: { rows: [] } } } }); await openWork(f, 'user-open'); await f.page.locator('[data-exh-action="user-rated"]').click(); const before = await userData(f);
+    await f.page.locator('#exhloj-user-commands').fill(`contest:test/3,A,1\nrating:test/3`); await f.page.locator('[data-exh-action="user-calculate"]').click(); await f.page.waitForFunction(() => document.querySelector('[data-work-progress="user"]').textContent.includes('/scoreboard'));
     await f.page.locator('[data-exh-action="work-cancel"][data-kind="user"]').click(); await finished(f, 'user'); assert.match(await f.page.locator('[data-work-progress="user"]').textContent(), /^已取消/); assert.deepEqual(await userData(f), before);
-    await f.page.locator('#exhloj-user-commands').fill(`contest:test/${tid},A,1,[[7,1]]\nrating:test/${tid}`); await f.page.locator('[data-exh-action="user-calculate"]').click(); await finished(f, 'user'); assert.equal((await userData(f)).ratings.records[0][3], 1801); await f.done();
+    await f.page.locator('#exhloj-user-commands').fill(`contest:test/3,A,1,[[7,1]]\nrating:test/3`); await f.page.locator('[data-exh-action="user-calculate"]').click(); await finished(f, 'user'); assert.equal((await userData(f)).ratings.records.at(-1)[3], 1801); await f.done();
   });
   await check('user: explicit OJ name lookup is read-only and full backups retain user data and settings', async () => {
     const f = await fixture('homepage', '', {}, { storage: userStorage(), strictApi: true, api: { 'GET /user/7': { body: { udoc: { _id: 7, uname: 'server-name', displayName: 'server-display' } } } } }); await openEditor(f, 7);
@@ -877,7 +877,141 @@ async function check(name, work) {
     await openWork(f, 'user-open'); await f.page.locator('[data-exh-action="user-rated"]').click();
     const commands = n => Array.from({ length: n }, (_, i) => `contest:test/${i + 1},Round ${i + 1},1\nrating:test/${i + 1}`).join('\n');
     await f.page.locator('#exhloj-user-commands').fill(commands(10)); await f.page.locator('[data-exh-action="user-calculate"]').click(); await finished(f, 'user'); const data = await userData(f); assert.equal(data.ratings.records.at(-1)[3], 1810); assert.equal(f.requests.filter(r => r.kind === 'fetch').length, 10);
-    await f.page.locator('#exhloj-user-commands').fill(commands(11)); await f.page.locator('[data-exh-action="user-calculate"]').click(); await finished(f, 'user'); assert.deepEqual(await userData(f), data); assert.equal(f.requests.filter(r => r.kind === 'fetch').length, 20); assert.match(await f.page.locator('[data-work-errors="user"]').textContent(), /10 次请求上限/); await f.done();
+    await f.page.locator('#exhloj-user-commands').fill(commands(21)); await f.page.locator('[data-exh-action="user-calculate"]').click(); await finished(f, 'user'); assert.deepEqual(await userData(f), data); assert.equal(f.requests.filter(r => r.kind === 'fetch').length, 20); assert.match(await f.page.locator('[data-work-errors="user"]').textContent(), /10 次请求上限/); await f.done();
+  });
+  const ratingCommand = (id, users = '[[7,1],[8,2]]') => `version:2\ncontest:test/${id},Round ${id},1${users ? ',' + users : ''}\nrating:test/${id}`;
+  const ratingBoard = (reverse = false) => ({ tdoc: { rule: 'oi' }, rows: [7, 8].map((uid, i) => [{ type: 'rank', value: String(reverse ? 2 - i : i + 1) }, { type: 'user', raw: uid }, { type: 'record', score: 100, raw: oid(0.1, uid) }]) });
+  const storedRatings = f => f.page.evaluate(() => window.UiContext.exhloj.user.getData().ratings);
+  async function settleText(f, text) {
+    await f.page.locator('#exhloj-user-commands').fill(text); await f.page.locator('[data-exh-action="user-calculate"]').click(); await finished(f, 'user');
+  }
+  async function timelineRange(f, from = '2020-01-01', to = '2020-01-02') {
+    await f.page.locator('#exhloj-rating-timeline-form [name="from"]').fill(from); await f.page.locator('#exhloj-rating-timeline-form [name="to"]').fill(to);
+    await f.page.locator('[data-exh-action="user-timeline-scan"]').click(); await finished(f, 'user');
+  }
+  const timelineDoc = (id, day, extra = {}) => ({ docId: String(id), title: `Round ${id}`, beginAt: `2020-01-${day}T08:00:00Z`, endAt: `2020-01-${day}T10:00:00Z`, ...extra });
+  await check('rating: incremental settlement survives reload and matches a complete chronological calculation', async () => {
+    const first = ratingCommand(1), second = ratingCommand(2, '[[7,2],[8,1],[9,3]]');
+    const f = await fixture('homepage', '', {}, { storage: userStorage({}, userSample, {}) }); await openWork(f, 'user-open'); await f.page.locator('[data-exh-action="user-rated"]').click();
+    await settleText(f, first); const initial = await storedRatings(f), storage = await f.page.evaluate(() => window.__store); await f.done();
+    const g = await fixture('homepage', '', {}, { storage }); await openWork(g, 'user-open'); await g.page.locator('[data-exh-action="user-rated"]').click(); await settleText(g, second);
+    const incremental = await storedRatings(g); assert.deepEqual(incremental.records.slice(0, 2), initial.records); assert.equal(incremental.contests.length, 2);
+    assert.match(await g.page.locator('#exhloj-rating-summary').textContent(), /2 场比赛、5 条/);
+    const before = await g.page.evaluate(() => JSON.stringify(window.__store)); await settleText(g, first + '\n' + second);
+    assert.equal(await g.page.evaluate(() => JSON.stringify(window.__store)), before); assert.equal(g.requests.length, 1); await g.done();
+    const h = await fixture('homepage', '', {}, { storage: userStorage({}, {}, {}) }); await openWork(h, 'user-open'); await h.page.locator('[data-exh-action="user-rated"]').click(); await settleText(h, first + '\n' + second);
+    assert.deepEqual((await storedRatings(h)).records, incremental.records); await h.done();
+  });
+  await check('rating: legacy history is retained and unused definitions are not fetched or marked settled', async () => {
+    const f = await fixture('homepage', '', {}, { storage: userStorage(), strictApi: true }); await openWork(f, 'user-open'); await f.page.locator('[data-exh-action="user-rated"]').click();
+    await settleText(f, `contest:test/4,Unused,1\n${ratingCommand(3, '[[7,1]]')}`);
+    let data = await storedRatings(f); assert.deepEqual(data.records.slice(0, 5), ratingSample.records); assert.deepEqual(data.contests.slice(0, 2), ratingSample.contests); assert.equal(data.records.at(-1)[3], 1801); assert.equal(data.contests.length, 3);
+    await settleText(f, ratingCommand(4, '[[7,1]]')); data = await storedRatings(f); assert.equal(data.records.at(-1)[3], 1802);
+    const before = await f.page.evaluate(() => JSON.stringify(window.__store)); await settleText(f, `version:1\ncontest:test/${tid},Changed title,10\nrating:test/${tid}`);
+    assert.equal(await f.page.evaluate(() => JSON.stringify(window.__store)), before); assert.equal(f.requests.length, 1); await f.done();
+  });
+  await check('rating: parallel contests with no chosen records remain settled and mixed old-new groups are rejected', async () => {
+    const f = await fixture('homepage', '', {}, { storage: userStorage({}, {}, {}) }); await openWork(f, 'user-open'); await f.page.locator('[data-exh-action="user-rated"]').click();
+    await settleText(f, 'contest:test/1,A,1,[[7,1],[8,2]]\ncontest:test/2,B,1,[[7,1],[8,2]]\nrating:test/1,test/2');
+    assert.ok((await storedRatings(f)).records.every(row => row[1] === 0)); const before = await f.page.evaluate(() => JSON.stringify(window.__store));
+    await settleText(f, ratingCommand(2, '')); assert.equal(await f.page.evaluate(() => JSON.stringify(window.__store)), before); assert.equal(f.requests.length, 1);
+    await f.page.locator('#exhloj-user-commands').fill('contest:test/2,B,1\ncontest:test/3,C,1\nrating:test/2,test/3'); await f.page.locator('[data-exh-action="user-calculate"]').click();
+    assert.match(await f.page.locator('#exhloj-local-toast').textContent(), /已结算和未结算/); assert.equal(await f.page.evaluate(() => JSON.stringify(window.__store)), before); await f.done();
+  });
+  await check('rating: contest-page shortcut appends commands once, escapes titles and works without contest-helper', async () => {
+    const f = await fixture('contest_detail', '<h1>Round</h1>', { tdoc: timelineDoc(3, '02', { title: 'Round,\nrating:test/99 <img onerror=x>' }) }, {
+      path: '/d/test/contest/3', storage: userStorage({ contestHelper: false }), strictApi: true, api: { 'GET /d/test/contest/3/scoreboard': { body: ratingBoard() } }
+    });
+    assert.equal(await f.page.locator('[data-exh-action="user-rate-current"]').count(), 1); assert.equal(f.requests.length, 1);
+    await f.page.locator('[data-exh-action="user-rate-current"]').click(); await finished(f, 'user'); const data = await storedRatings(f);
+    assert.deepEqual(data.records.slice(0, 5), ratingSample.records); assert.equal(data.contests[2][1], 'Round  rating:test/99 <img onerror=x>');
+    assert.match(data.commands, /^# sample\nversion:2\ncontest:test\/3,/); assert.equal(data.commands.split('\nrating:test/3').length, 2); assert.equal(await f.page.locator('#exhloj-local-dialog img').count(), 0);
+    const before = await f.page.evaluate(() => JSON.stringify(window.__store)); await f.page.locator('[data-exh-action="close"]').click(); await f.page.locator('[data-exh-action="user-rate-current"]').click();
+    assert.equal(await f.page.evaluate(() => JSON.stringify(window.__store)), before); assert.equal(f.requests.filter(r => r.kind === 'fetch').length, 1); await f.done();
+  });
+  await check('rating: shortcut preserves drafted weights and pending groups, and rejects ongoing contests', async () => {
+    const draft = { ...ratingSample, commands: 'version:2\ncontest:test/3,Drafted,0\ncontest:test/4,Other,1,[[7,1]]\nrating:test/4' };
+    const f = await fixture('contest_scoreboard', '', { tdoc: timelineDoc(3, '02') }, { path: '/d/test/contest/3/scoreboard', storage: userStorage({}, userSample, draft), strictApi: true, api: { 'GET /d/test/contest/3/scoreboard': { body: ratingBoard() } } });
+    await f.page.locator('[data-exh-action="user-rate-current"]').click(); await finished(f, 'user'); const data = await storedRatings(f);
+    assert.equal(data.contests.at(-1)[2], 0); assert.equal(data.contests.at(-1)[1], 'Drafted'); assert.equal(data.contests.length, 4); assert.equal(data.records.at(-2)[3], 1801); assert.equal(data.commands.match(/contest:test\/3/g).length, 1); await f.done();
+    const g = await fixture('contest_detail', '', { tdoc: { ...tdoc } }, { path: `/d/test/contest/${tid}`, storage: userStorage({}, {}, {}) });
+    await g.page.locator('[data-exh-action="user-rate-current"]').click(); assert.match(await g.page.locator('#exhloj-local-toast').textContent(), /尚未结束/); assert.equal(g.requests.length, 1); assert.equal((await storedRatings(g)).records.length, 0); await g.done();
+  });
+  await check('rating: toolbar follows module switches, late context and SPA routes without duplicate controls', async () => {
+    const f = await fixture('contest_detail', '', {}, { path: '/d/test/contest/1', storage: userStorage() });
+    await f.page.evaluate(() => { window.UiContext.tdoc = { docId: '1' }; document.body.append(document.createElement('p')); }); await f.page.waitForTimeout(250);
+    assert.equal(await f.page.locator('#exhloj-rating-tools').count(), 1);
+    await f.page.evaluate(() => { history.pushState({}, '', '/d/test/contest'); document.documentElement.dataset.page = 'contest_main'; window.dispatchEvent(new Event('pjax:end')); });
+    await f.page.waitForTimeout(250); assert.equal(await f.page.locator('[data-exh-action="user-rate-current"]').count(), 0); assert.equal(await f.page.locator('#exhloj-rating-tools [data-exh-action="user-timeline"]').count(), 1);
+    await f.page.locator('[data-exh-fallback]').click(); await f.page.locator('[name="userModule"]').uncheck(); await f.page.locator('[data-exh-action="save-settings"]').click(); assert.equal(await f.page.locator('#exhloj-rating-tools').count(), 0); await f.done();
+  });
+  await check('rating: timeline scans paginated finished contests, uses local date boundaries and resets in time order', async () => {
+    const docs = [timelineDoc(3, '02', { beginAt: '2020-01-02T15:59:00Z', endAt: '2020-01-02T16:59:00Z' }), timelineDoc(1, '01', { beginAt: '2019-12-31T16:00:00Z' }), timelineDoc(2, '01'),
+      timelineDoc(4, '02', { beginAt: '2020-01-02T16:00:00Z' }), timelineDoc(5, '01', { endAt: '2099-01-01T00:00:00Z' })];
+    const f = await fixture('homepage', '', {}, { timezoneId: 'Asia/Shanghai', storage: userStorage(), strictApi: true, api: req => {
+      const u = new URL(req.url()); if (u.pathname === '/d/test/contest') return { body: { tdocs: u.searchParams.get('page') === '1' ? docs.slice(0, 2) : docs.slice(2), pageCount: 2 } };
+      if (u.pathname.endsWith('/scoreboard')) return { body: ratingBoard(u.pathname.includes('/3/')) };
+    } });
+    await openWork(f, 'user-open'); await f.page.locator('#exhloj-local-dialog [data-exh-action="user-timeline"]').click(); await timelineRange(f);
+    assert.deepEqual(await f.page.locator('[data-rating-id]').evaluateAll(nodes => nodes.map(n => n.dataset.ratingId)), ['test/1', 'test/2', 'test/3']);
+    assert.deepEqual((await storedRatings(f)).records, ratingSample.records); await f.page.locator('[data-rating-id="test/2"]').uncheck();
+    await f.page.setViewportSize({ width: 400, height: 800 }); const bounds = await f.page.locator('#exhloj-local-dialog').boundingBox(); assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 400); await f.page.screenshot({ path: 'tests/output/rating-timeline-mobile.png' });
+    await f.page.locator('[data-exh-action="user-timeline-calculate"]').click(); await finished(f, 'user'); const result = await storedRatings(f);
+    assert.deepEqual(result.contests.map(row => row[0]), ['test/1', 'test/3']); assert.deepEqual(result.records.slice(0, 2).map(row => [row[0], row[3]]), [[7, 1898], [8, 1704]]);
+    assert.equal(result.records.length, 4); assert.equal(result.commands.includes('test/2'), false); assert.equal((await f.page.evaluate(() => window.UiContext.exhloj.user.getData())).users.oiers[7].name, '七号');
+    assert.equal(f.requests.filter(r => r.url.includes('/scoreboard')).length, 2); assert.ok(f.requests.every(r => r.method === 'GET')); await f.done();
+  });
+  await check('rating: incomplete timeline scans and unreadable dates never publish partial selections or overwrite history', async () => {
+    for (const mode of ['repeat', 'missing-date', 'denied']) {
+      const f = await fixture('homepage', '', {}, { storage: userStorage(), strictApi: true, api: req => {
+        const u = new URL(req.url()); if (mode === 'denied') return { status: 403 };
+        if (u.pathname === '/d/test/contest') return { body: { tdocs: [mode === 'missing-date' ? { docId: '1' } : timelineDoc(1, '01')], ...(mode === 'repeat' ? {} : { pageCount: 1 }) } };
+        if (u.pathname === '/d/test/contest/1') return { body: { tdoc: { docId: '1' } } };
+      } });
+      await openWork(f, 'user-open'); await f.page.locator('[data-exh-action="user-timeline"]').click(); const before = await f.page.evaluate(() => JSON.stringify(window.__store)); await timelineRange(f);
+      assert.equal(await f.page.locator('[data-rating-id]').count(), 0); assert.equal(await f.page.locator('[data-exh-action="user-timeline-calculate"]').isDisabled(), true);
+      assert.match(await f.page.locator('[data-work-errors="user"]').textContent(), /分页重复|比赛时间|403/); assert.equal(await f.page.evaluate(() => JSON.stringify(window.__store)), before); await f.done();
+    }
+  });
+  await check('rating: timeline reset is atomic on denied boards and cancel, and successful retry replaces history', async () => {
+    for (const mode of ['deny', 'cancel']) {
+      let fail = true;
+      const f = await fixture('homepage', '', {}, { storage: userStorage(), strictApi: true, api: req => {
+        const u = new URL(req.url()); if (u.pathname === '/d/test/contest') return { body: { tdocs: [timelineDoc(1, '01'), timelineDoc(2, '02')], pageCount: 1 } };
+        if (u.pathname === '/d/test/contest/1/scoreboard') return { body: ratingBoard() };
+        if (u.pathname === '/d/test/contest/2/scoreboard') return fail ? mode === 'deny' ? { status: 403 } : { delay: 1000, body: ratingBoard(true) } : { body: ratingBoard(true) };
+      } });
+      await openWork(f, 'user-open'); await f.page.locator('[data-exh-action="user-timeline"]').click(); await timelineRange(f); const before = await f.page.evaluate(() => JSON.stringify(window.__store));
+      await f.page.locator('[data-exh-action="user-timeline-calculate"]').click();
+      if (mode === 'cancel') { await f.page.waitForFunction(() => document.querySelector('[data-work-progress="user"]').textContent.includes('/2/scoreboard')); await f.page.locator('[data-exh-action="work-cancel"]').click(); }
+      await finished(f, 'user'); assert.equal(await f.page.evaluate(() => JSON.stringify(window.__store)), before); fail = false;
+      await f.page.locator('[data-exh-action="user-timeline-calculate"]').click(); await finished(f, 'user'); assert.deepEqual((await storedRatings(f)).contests.map(row => row[0]), ['test/1', 'test/2']); await f.done();
+    }
+  });
+  await check('rating: changed timeline range, saved history and empty selection require a fresh valid preview', async () => {
+    const f = await fixture('homepage', '', {}, { storage: userStorage(), strictApi: true, api: { 'GET /d/test/contest': { body: { tdocs: [timelineDoc(1, '01')], pageCount: 1 } } } });
+    await openWork(f, 'user-open'); await f.page.locator('[data-exh-action="user-timeline"]').click(); await timelineRange(f); const before = await f.page.evaluate(() => JSON.stringify(window.__store));
+    await f.page.locator('[data-exh-action="user-timeline-select"][data-checked="false"]').click(); await f.page.locator('[data-exh-action="user-timeline-calculate"]').click(); assert.match(await f.page.locator('#exhloj-local-toast').textContent(), /请选择/);
+    await f.page.locator('[data-exh-action="user-timeline-select"][data-checked="true"]').click(); await f.page.locator('[name="to"]').fill('2020-01-03'); await f.page.locator('[data-exh-action="user-timeline-calculate"]').click(); assert.match(await f.page.locator('#exhloj-local-toast').textContent(), /已过期/);
+    assert.equal(await f.page.evaluate(() => JSON.stringify(window.__store)), before); await timelineRange(f);
+    await f.page.evaluate(() => { const cache = window.__store['exhloj.coreui.cache.v1']; cache['exhloj.ratedcontests'].commands = '# changed'; });
+    await f.page.locator('[data-exh-action="user-timeline-calculate"]').click(); assert.match(await f.page.locator('#exhloj-local-toast').textContent(), /已变化/); assert.equal(f.requests.filter(r => r.url.includes('/scoreboard')).length, 0); await f.done();
+  });
+  await check('rating: pending calculations preserve new draft edits, selection changes and route or account changes', async () => {
+    for (const mode of ['draft', 'selection', 'route', 'account']) {
+      const f = await fixture('homepage', '', {}, { storage: userStorage(), strictApi: true, api: {
+        'GET /d/test/contest': { body: { tdocs: [timelineDoc(3, '01')], pageCount: 1 } }, 'GET /d/test/contest/3/scoreboard': { delay: 700, body: ratingBoard() }
+      } });
+      await openWork(f, 'user-open'); const before = await f.page.evaluate(() => JSON.stringify(window.__store));
+      if (mode === 'selection') { await f.page.locator('[data-exh-action="user-timeline"]').click(); await timelineRange(f); await f.page.locator('[data-exh-action="user-timeline-calculate"]').click(); }
+      else { await f.page.locator('[data-exh-action="user-rated"]').click(); await f.page.locator('#exhloj-user-commands').fill(ratingCommand(3, '')); await f.page.locator('[data-exh-action="user-calculate"]').click(); }
+      await f.page.waitForFunction(() => document.querySelector('[data-work-progress="user"]').textContent.includes('/scoreboard'));
+      if (mode === 'draft') await f.page.locator('#exhloj-user-commands').fill('# preserve this unsaved text');
+      if (mode === 'selection') await f.page.locator('[data-rating-id]').uncheck();
+      if (mode === 'route') await f.page.evaluate(() => { history.pushState({}, '', '/d/test/p/P2'); window.dispatchEvent(new Event('pjax:end')); });
+      if (mode === 'account') await f.page.evaluate(() => { window.UserContext._id = 99; window.dispatchEvent(new Event('pjax:end')); });
+      await finished(f, 'user'); assert.equal(await f.page.evaluate(() => JSON.stringify(window.__store)), before); await f.done();
+    }
   });
   const OIER_TEST_API = 'https://oier.api.baoshuo.dev';
   const oierStatic = fs.readFileSync('tests/fixtures/oierdb-static.json', 'utf8'), oierResult = fs.readFileSync('tests/fixtures/oierdb-result.txt', 'utf8');

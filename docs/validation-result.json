@@ -1,8 +1,8 @@
 {
-  "version": "2.5.4",
-  "scriptSha256": "6595254e2dd81e035cdf65f002563205d890c5ecb41a4e24ef3eef4427229b15",
+  "version": "2.6.0",
+  "scriptSha256": "90279468a803f7e0e54f29c77a6b59b97e036518eecec58b8f31cc69630bd150",
   "browser": "153.0.8010.0",
-  "passed": 94,
+  "passed": 105,
   "checks": [
     "core: guest fallback, lazy user menu, deduplication, no automatic writes/requests",
     "core: save UI switch and preserve ports across reinstall/page load",
@@ -66,6 +66,17 @@
     "user: complete monitor results can explicitly update local practice points",
     "user: legacy display options, recent twenty-contest metrics, and escaped imported profile names",
     "user: exact request budget allows calculation and blocks only the next network request",
+    "rating: incremental settlement survives reload and matches a complete chronological calculation",
+    "rating: legacy history is retained and unused definitions are not fetched or marked settled",
+    "rating: parallel contests with no chosen records remain settled and mixed old-new groups are rejected",
+    "rating: contest-page shortcut appends commands once, escapes titles and works without contest-helper",
+    "rating: shortcut preserves drafted weights and pending groups, and rejects ongoing contests",
+    "rating: toolbar follows module switches, late context and SPA routes without duplicate controls",
+    "rating: timeline scans paginated finished contests, uses local date boundaries and resets in time order",
+    "rating: incomplete timeline scans and unreadable dates never publish partial selections or overwrite history",
+    "rating: timeline reset is atomic on denied boards and cancel, and successful retry replaces history",
+    "rating: changed timeline range, saved history and empty selection require a fresh valid preview",
+    "rating: pending calculations preserve new draft edits, selection changes and route or account changes",
     "oier audit: a refresh preserves saved profile edits even when the binding is unchanged",
     "oier audit: link reads preserve edits typed into the form while downloading",
     "oier audit: refreshing saved data does not replace a newly edited form draft",
@@ -102,23 +113,23 @@
   "checkedAt": "2026-11-05",
   "node": "v24.22.1",
   "packaging": {
-    "version": "2.5.4",
+    "version": "2.6.0",
     "passed": 3,
     "failures": []
   },
   "session": {
-    "version": "2.5.4",
-    "scriptSha256": "6595254e2dd81e035cdf65f002563205d890c5ecb41a4e24ef3eef4427229b15",
+    "version": "2.6.0",
+    "scriptSha256": "90279468a803f7e0e54f29c77a6b59b97e036518eecec58b8f31cc69630bd150",
     "browser": "153.0.8010.0",
     "fixture": "local HTTP server; real HttpOnly cookies; no live OJ account",
     "passed": 0,
     "checks": [],
     "failure": {
       "check": "session: full navigation and plugin controls preserve the HttpOnly session",
-      "message": "page.goto: net::ERR_EMPTY_RESPONSE at http://oj.hailiangedu.com:43381/user/login\nCall log:\n\u001b[2m  - navigating to \"http://oj.hailiangedu.com:43381/user/login\", waiting until \"load\"\u001b[22m\n"
+      "message": "page.goto: net::ERR_EMPTY_RESPONSE at http://oj.hailiangedu.com:41661/user/login\nCall log:\n\u001b[2m  - navigating to \"http://oj.hailiangedu.com:41661/user/login\", waiting until \"load\"\u001b[22m\n"
     }
   },
-  "totalPassedLocally": 97,
+  "totalPassedLocally": 108,
   "liveSiteLoginVerified": false,
   "limitations": [
     "Local HTTP session fixtures returned net::ERR_EMPTY_RESPONSE in this runtime; they must pass in GitHub Actions before merge.",
