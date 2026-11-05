@@ -293,6 +293,74 @@ async function check(name, work) {
     assert.equal(await f.page.locator('#exhloj-local-remote a').count(), 0);
     assert.match(await f.page.locator('#exhloj-local-remote').innerText(), /未识别/); await f.done();
   });
+  await check('remote: QOJ title markers supply default links for the reported local problems without requests or writes', async () => {
+    const cases = [
+      ['[QOJ18209] 以你的名字呼唤你 3', 18209], ['[QOJ15502] 字符串问题', 15502],
+      ['[QOJ18004] 以你的名字呼唤你', 18004], ['[QOJ18005] 以你的名字呼唤你 2', 18005],
+      ['[QOJ22878] 以你的名字呼唤你 4', 22878], ['[QOJ21428] 远方之歌', 21428],
+      ['QOJ18209', 18209], ['【qoj # 18209】 标题', 18209], ['[ＱＯＪ１８２０９] 标题', 18209],
+      ['来自QOJ18209的题目', 18209], ['[QOJ018209] QOJ18209', 18209],
+    ];
+    for (const [title, id] of cases) {
+      const context = { domain: { _id: 'pnoi' }, pdoc: { domainId: 'pnoi', docId: 1717, pid: 'S1717', title, content: 'Local', config: {} } };
+      const f = await fixture('problem_detail', remoteBody, context, { path: '/d/pnoi/p/S1717' });
+      assert.equal(await f.page.locator(`#exhloj-local-remote a[href="https://qoj.ac/problem/${id}"]`).count(), 1);
+      assert.equal(f.requests.length, 1); assert.deepEqual(await f.page.evaluate(() => window.__gm), []); assert.deepEqual(await f.page.evaluate(() => window.__store), {});
+      await f.page.locator('[data-exh-action="remote-config"]').click();
+      assert.equal(await f.page.locator('#exhloj-origin-type').inputValue(), 'qoj'); assert.equal(await f.page.locator('#exhloj-origin-target').inputValue(), String(id)); await f.done();
+    }
+  });
+  await check('remote: QOJ title markers reject embedded words, invalid IDs, other platforms and conflicting references', async () => {
+    for (const title of ['[HDU8265] 三串共鸣', '[HDU8259] 又一个后缀数组问题', 'S1717 以你的名字呼唤你 3', 'NotQOJ18209', 'QOJ18209abc', 'QOJ_18209', 'QOJ0', 'QOJ99999999999999999999999', '[QOJ18209 / QOJ15502] 对比', '', null, {}]) {
+      const f = await fixture('problem_detail', remoteBody + '<div class="typo">参考 QOJ18004</div>', { pdoc: { docId: 1717, pid: 'S1717', title, content: '题面中提到 QOJ18005', config: {} } });
+      assert.equal(await f.page.locator('#exhloj-local-remote a').count(), 0); assert.deepEqual(await f.page.evaluate(() => window.__gm), []); await f.done();
+    }
+  });
+  await check('remote: QOJ title defaults respect manual choices, disabled recognition and explicit origins', async () => {
+    const title = '[QOJ18209] 以你的名字呼唤你 3', qoj = id => `https://qoj.ac/problem/${id}`;
+    const cases = [
+      { cache: { 'exhloj.remoteOrigins': { 'test/10': { type: 'qoj', target: '15502' } } }, expected: qoj(15502) },
+      { cache: { 'exhloj.remoteOrigins': { 'test/10': { type: 'none' } } }, expected: null },
+      { cache: { 'exhloj.problemOriginCache': { 'test/10': { type: 'qoj', target: '18004' } } }, expected: qoj(18004) },
+      { config: { subType: 'qoj', target: '18005' }, expected: qoj(18005) },
+      { pid: 'CF1A', expected: 'https://codeforces.com/contest/1/problem/A' },
+      { extra: '<div class="remote__tags"><a href="https://qoj.ac/problem/22878">Explicit source</a></div>', expected: qoj(22878) },
+    ];
+    for (const item of cases) {
+      const f = await fixture('problem_detail', remoteBody + (item.extra || ''), { domain: { _id: 'test' }, pdoc: { docId: 10, pid: item.pid || 'S1717', title, content: 'Local', config: item.config || {} } },
+        { storage: { ...noAuto, 'exhloj.coreui.cache.v1': JSON.stringify(item.cache || {}) } });
+      if (item.expected) assert.equal(await f.page.locator(`#exhloj-local-remote a[href="${item.expected}"]`).count(), 1);
+      else assert.match(await f.page.locator('#exhloj-local-remote').textContent(), /已停用/);
+      assert.equal(await f.page.locator(`#exhloj-local-remote a[href="${qoj(18209)}"]`).count(), 0); assert.deepEqual(await f.page.evaluate(() => window.__gm), []); await f.done();
+    }
+    const f = await fixture('problem_detail', remoteBody, { pdoc: { docId: 10, pid: 'S1717', title, config: {} } },
+      { storage: { ...noAuto, 'exhloj.coreui.cache.v1': JSON.stringify(cases[0].cache) } });
+    await f.page.locator('[data-exh-action="remote-config"]').click(); await f.page.locator('[data-exh-action="remote-reset-origin"]').click();
+    assert.equal(await f.page.locator(`#exhloj-local-remote a[href="${qoj(18209)}"]`).count(), 1); await f.done();
+  });
+  await check('remote: QOJ title defaults update with late titles and SPA navigation without duplicate or stale links', async () => {
+    const f = await fixture('problem_detail', remoteBody, { pdoc: { docId: 1717, pid: 'S1717', title: '等待标题', config: {} } });
+    for (const id of [18209, 15502]) {
+      await f.page.evaluate(id => { window.UiContext.pdoc.title = `[QOJ${id}] 新标题`; document.body.append(document.createElement('p')); }, id);
+      await f.page.waitForSelector(`#exhloj-local-remote a[href="https://qoj.ac/problem/${id}"]`);
+      assert.equal(await f.page.locator('#exhloj-local-remote a').count(), 1);
+    }
+    await f.page.evaluate(() => {
+      history.pushState({}, '', '/d/test/p/S1721'); window.UiContext.pdoc = { docId: 1721, pid: 'S1721', title: '[QOJ18005] 以你的名字呼唤你 2', config: {} };
+      document.body.append(document.createElement('p'));
+    });
+    await f.page.waitForSelector('#exhloj-local-remote a[href="https://qoj.ac/problem/18005"]');
+    assert.equal(await f.page.locator('#exhloj-local-remote a').count(), 1); assert.deepEqual(await f.page.evaluate(() => window.__gm), []); await f.done();
+  });
+  await check('remote: QOJ title defaults follow contest hide, shortcut and show settings on tid URLs', async () => {
+    const context = { domain: { _id: 'pnoi' }, pdoc: { docId: 1717, pid: 'S1717', title: '[QOJ18209] 以你的名字呼唤你 3', config: {} } };
+    for (const mode of ['hide', 'shortcut', 'show']) {
+      const f = await fixture('contest_detail_problem', remoteBody, context, { path: '/d/pnoi/p/S1717?tid=6ae9a637ffdcf3e7f6dd5b1e', storage: { 'exhloj.coreui.settings.v1': JSON.stringify({ remoteContest: mode }) } });
+      assert.equal(await f.page.locator('#exhloj-local-remote a').count(), mode === 'show' ? 1 : 0);
+      if (mode === 'shortcut') { await f.page.keyboard.press('Control+q'); await f.page.waitForSelector('#exhloj-local-remote a[href="https://qoj.ac/problem/18209"]'); }
+      assert.deepEqual(await f.page.evaluate(() => window.__gm), []); assert.equal(f.requests.length, 1); await f.done();
+    }
+  });
   await check('remote: current live Luogu HTML schema, statement copy and persistent metadata cache', async () => {
     const f = await fixture('problem_detail', remoteBody, originContext('luogu', 'P1001'), { remote: { [metaURL]: { text: fs.readFileSync('tests/fixtures/luogu-problem.response', 'utf8') } } });
     await f.page.waitForSelector('[data-exh-difficulty="1"]');

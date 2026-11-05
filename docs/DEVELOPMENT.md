@@ -13,7 +13,7 @@
 | `scripts/build-vendor.mjs` | 通过 esbuild 重建渲染器和拼音字典 |
 | `scripts/package-release.py` | 生成用户安装 ZIP、版本说明与 SHA-256 |
 | `scripts/package-source.py` | 生成包含 `.github` 的完整源码 ZIP，并暂存当前版本发布文件 |
-| `tests/browser.cjs` | 89 组 Chromium 场景，接口由固定响应模拟 |
+| `tests/browser.cjs` | 94 组 Chromium 场景，接口由固定响应模拟 |
 | `tests/session.cjs` | 5 组本地 HTTP 会话场景，使用真实 Cookie 和跳转 |
 | `tests/package_test.py` | 3 组源码包完整性、可重复打包和过期文件检查 |
 | `tests/fixtures/` | 测试输入，不包含真实账号会话 |
@@ -29,6 +29,7 @@
 - `core`、`broadcast`、`on`：事件与共用接口。
 - `recognizeCaptcha`、`runCaptcha`：验证码识别与折叠。
 - `remoteProblem`、`loadRemoteMeta`：题源读取和显示。
+- `qojTitleOrigin`：仅从当前 `pdoc.title` 提取独立的 QOJ 编号；NFKC 规范化后合并同一编号，拒绝非正整数、超出安全整数和多编号冲突，作为 `inferOrigin` 的最后一层回退。自动结果不写入手动映射，页面更新时重新计算。
 - `workRequest`、`runWork`、`listPages`：串行请求、取消与限额。
 - `exportContestStatements`、`collectContestRecords`：比赛导出。
 - `scanJuan`：卷王统计与快照。
