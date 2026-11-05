@@ -1,6 +1,6 @@
 Extend HLOJ
-Version: 2.5.4
+Version: 2.6.0
 Modules: core, ui, captcha, remote-problem, contest-helper, juan-monitor, user
-Script SHA-256: 6595254e2dd81e035cdf65f002563205d890c5ecb41a4e24ef3eef4427229b15
+Script SHA-256: 908e3c9d2942903bc89ca7803f0042d1c8f406d17e91f8b621bb6a437de46e53
 User data and Rating: local only; no special administrator UID
 Automatic registration: disabled by default
