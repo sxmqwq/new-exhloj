@@ -1,6 +1,6 @@
 {
   "version": "2.6.0",
-  "scriptSha256": "90279468a803f7e0e54f29c77a6b59b97e036518eecec58b8f31cc69630bd150",
+  "scriptSha256": "908e3c9d2942903bc89ca7803f0042d1c8f406d17e91f8b621bb6a437de46e53",
   "browser": "153.0.8010.0",
   "passed": 105,
   "checks": [
@@ -119,14 +119,14 @@
   },
   "session": {
     "version": "2.6.0",
-    "scriptSha256": "90279468a803f7e0e54f29c77a6b59b97e036518eecec58b8f31cc69630bd150",
+    "scriptSha256": "908e3c9d2942903bc89ca7803f0042d1c8f406d17e91f8b621bb6a437de46e53",
     "browser": "153.0.8010.0",
     "fixture": "local HTTP server; real HttpOnly cookies; no live OJ account",
     "passed": 0,
     "checks": [],
     "failure": {
       "check": "session: full navigation and plugin controls preserve the HttpOnly session",
-      "message": "page.goto: net::ERR_EMPTY_RESPONSE at http://oj.hailiangedu.com:41661/user/login\nCall log:\n\u001b[2m  - navigating to \"http://oj.hailiangedu.com:41661/user/login\", waiting until \"load\"\u001b[22m\n"
+      "message": "page.goto: net::ERR_EMPTY_RESPONSE at http://oj.hailiangedu.com:46407/user/login\nCall log:\n\u001b[2m  - navigating to \"http://oj.hailiangedu.com:46407/user/login\", waiting until \"load\"\u001b[22m\n"
     }
   },
   "totalPassedLocally": 108,

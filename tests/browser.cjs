@@ -1012,6 +1012,15 @@ async function check(name, work) {
       if (mode === 'account') await f.page.evaluate(() => { window.UserContext._id = 99; window.dispatchEvent(new Event('pjax:end')); });
       await finished(f, 'user'); assert.equal(await f.page.evaluate(() => JSON.stringify(window.__store)), before); await f.done();
     }
+    const f = await fixture('homepage', '', {}, { storage: userStorage() }); await openWork(f, 'user-open'); await f.page.locator('[data-exh-action="user-rated"]').click();
+    const before = await f.page.evaluate(() => JSON.stringify(window.__store));
+    await f.page.evaluate(async text => {
+      const pending = window.UiContext.exhloj.user.calculate(text);
+      // A navigation can happen before Hydro dispatches any PJAX/DOM event.
+      history.pushState({}, '', '/d/test/p/P2'); await pending;
+    }, ratingCommand(3));
+    assert.equal(await f.page.evaluate(() => JSON.stringify(window.__store)), before);
+    assert.match(await f.page.locator('[data-work-errors="user"]').textContent(), /页面已变化|任务已取消/); await f.done();
   });
   const OIER_TEST_API = 'https://oier.api.baoshuo.dev';
   const oierStatic = fs.readFileSync('tests/fixtures/oierdb-static.json', 'utf8'), oierResult = fs.readFileSync('tests/fixtures/oierdb-result.txt', 'utf8');

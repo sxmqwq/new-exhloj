@@ -1519,7 +1519,7 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
   function checkJob(job, requesting = false) {
     if (job.controller.signal.aborted) throw workError('任务已取消');
     if (job.owner !== +user()._id) throw workError('登录账号已变化，任务停止');
-    if (job.kind === 'user' && job.epoch !== routeEpoch) throw workError('页面已变化，请重新开始结算');
+    if (job.kind === 'user' && (job.epoch !== routeEpoch || job.address !== location.href || job.pageName !== pageName())) throw workError('页面已变化，请重新开始结算');
     if (requesting && job.count >= job.limit) throw workError(`达到 ${job.limit} 次请求上限；本次结果不完整`, true);
   }
   function pauseWork(ms, signal) {
@@ -1572,10 +1572,11 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
     });
   }
   async function runWork(kind, fn, local = false) {
+    if (kind === 'user') syncPageContext();
     if (workJobs.has(kind)) throw workError('此模块已有任务运行，请等待或取消');
     if (!local && !(+user()._id > 0)) throw workError('请先登录 OJ');
     const state = workStates[kind], job = { kind, count: 0, limit: settings.helperRequestLimit,
-      delay: settings.helperDelay, owner: +user()._id, epoch: routeEpoch, controller: new AbortController() };
+      delay: settings.helperDelay, owner: +user()._id, epoch: routeEpoch, address: location.href, pageName: pageName(), controller: new AbortController() };
     workJobs.set(kind, job); Object.assign(state, { kind, job, running: true, status: '', message: '', errors: [] }); updateWorkProgress(kind);
     try { return await fn(job, state); }
     catch (error) {
@@ -2735,7 +2736,7 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
       checkJob(job);
       if (!form.isConnected || JSON.stringify(ratingTimelineRange()) !== JSON.stringify(range)) throw workError('时间范围已变化，请重新读取');
       rows.sort((a, b) => a.begin - b.begin || a.id.localeCompare(b.id));
-      ratingTimeline = { range, rows, owner: job.owner, epoch: job.epoch, baseline: JSON.stringify(userStore().ratings) };
+      ratingTimeline = { range, rows, owner: job.owner, epoch: job.epoch, address: job.address, pageName: job.pageName, baseline: JSON.stringify(userStore().ratings) };
       const table = el('table'), head = el('tr'); for (const text of ['选择', '开始时间', '比赛', '状态']) head.append(el('th', {}, text)); table.append(head);
       const saved = new Set(userStore().ratings.contests.map(row => row[0]));
       for (const row of rows) {
@@ -2750,7 +2751,7 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
   }
   function selectedRatingTimeline() {
     const scan = ratingTimeline;
-    if (!scan || scan.owner !== +user()._id || scan.epoch !== routeEpoch || JSON.stringify(scan.range) !== JSON.stringify(ratingTimelineRange())) throw workError('比赛列表已过期，请重新读取时间范围');
+    if (!scan || scan.owner !== +user()._id || scan.epoch !== routeEpoch || scan.address !== location.href || scan.pageName !== pageName() || JSON.stringify(scan.range) !== JSON.stringify(ratingTimelineRange())) throw workError('比赛列表已过期，请重新读取时间范围');
     if (scan.baseline !== JSON.stringify(userStore().ratings)) throw workError('本地 Rating 数据或命令草稿已变化，请重新读取后核对');
     const selected = new Set($$('[data-rating-id]:checked').map(input => input.dataset.ratingId)), rows = scan.rows.filter(row => selected.has(row.id));
     if (!rows.length || rows.length > 200) throw workError('请选择 1–200 场比赛');
