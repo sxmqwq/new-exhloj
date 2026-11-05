@@ -1,6 +1,6 @@
 # Extend HLOJ
 
-Extend HLOJ 的本地重制版，当前版本 **2.5.3**。安装在 Tampermonkey 中，增强 HLOJ / 部分 Hydro 页面的训练体验。
+Extend HLOJ 的本地重制版，当前版本 **2.5.4**。安装在 Tampermonkey 中，增强 HLOJ / 部分 Hydro 页面的训练体验。
 
 本版保留原脚本的作者信息，恢复了以下七个模块，不依赖原插件的共享后端。
 
@@ -9,7 +9,7 @@ Extend HLOJ 的本地重制版，当前版本 **2.5.3**。安装在 Tampermonkey
 | `core` | 设置、模块开关、缓存与 JSON 备份、事件接口 |
 | `ui` | 界面调整、作业附件、榜单标记、Markdown 复制、头像链接、权限查看、CPH / CP Editor |
 | `captcha` | 本地 SVG 验证码识别、折叠与展开、可选识别记录 |
-| `remote-problem` | 题源链接、难度、翻译、题解、本地导出、原站公开提交查看 |
+| `remote-problem` | 题源链接、QOJ 题名识别、难度、翻译、题解、本地导出、原站公开提交查看 |
 | `contest-helper` | 题面和附件 ZIP、提交 CSV/JSON、Ghost、手动或可选自动报名 |
 | `juan-monitor` | 公开提交与比赛/作业榜单汇总、按域和题目去重、本地快照增量 |
 | `user` | 本地资料、姓名颜色、CCF 标记、获奖信息、Rating 历史/排行/结算、OIerDb 链接导入、排名页快捷导入与刷新 |
@@ -21,7 +21,7 @@ Extend HLOJ 的本地重制版，当前版本 **2.5.3**。安装在 Tampermonkey
 3. 升级已有版本时，推荐直接在原脚本的编辑器中替换全文，以保留设置和缓存。作为新脚本安装时，先停用旧脚本，再按需导入旧版 JSON 备份。
 4. 刷新 OJ，在用户菜单或右下角 **Extend HLOJ** 按钮打开设置。
 
-现成的安装包位于 [`release/exhloj-2.5.3.zip`](release/exhloj-2.5.3.zip)，其中包含脚本、安装说明、版本信息和第三方许可证。`release/exhloj-2.4.0.zip` 等旧包仅供历史版本使用。
+现成的安装包位于 [`release/exhloj-2.5.4.zip`](release/exhloj-2.5.4.zip)，其中包含脚本、安装说明、版本信息和第三方许可证。`release/exhloj-2.4.0.zip` 等旧包仅供历史版本使用。
 
 | 需要做什么 | 下载内容 |
 | --- | --- |
@@ -32,6 +32,10 @@ Extend HLOJ 的本地重制版，当前版本 **2.5.3**。安装在 Tampermonkey
 Actions 将当前版本的安装文件与源码分别上传为 `exhloj-<版本>-install` 和 `exhloj-<版本>-source`；GitHub 下载的 artifact ZIP 是外层容器，解开后再使用其中对应的 ZIP。源码包不包含 `node_modules`、测试输出、Git 凭据或历史安装包。`SHA256SUMS` 覆盖当前版本的全部发布文件。
 
 完整使用说明见 [`docs/INSTALL.zh-CN.txt`](docs/INSTALL.zh-CN.txt)。本仓库没有预设 GitHub 用户名，也没有自动更新地址；发布到自己的仓库后，可按需要自行配置。
+
+## 题源自动识别
+
+题目名称中的 `[QOJ18209]`、`QOJ18209` 等标记可自动作为默认题源，打开题目即显示对应的 QOJ 原题链接。支持大小写、空格、可选 `#` 和全角字符；手动配置、停用识别和已有明确题源优先。多个不同 QOJ 编号不自动选择，比赛页仍按原有题源显示设置处理，识别本身不请求 QOJ 或写入手动配置。
 
 ## 用户资料与 OIerDb
 
@@ -116,7 +120,7 @@ npm run package:source:check
 
 ## 验证
 
-检查包括 **89 组模拟页面浏览器场景、5 组本地 HTTP 会话场景和 3 组包结构检查**。前者覆盖七个模块及 OIerDb 的 24 条获奖记录示例；会话检查使用真实 HttpOnly Cookie、本地登录重定向、普通跳转和 PJAX，不拦截模拟 OJ 的 fetch 响应。全部检查均不需要真实 OJ 账号，输出在 `tests/output/`。
+检查包括 **94 组模拟页面浏览器场景、5 组本地 HTTP 会话场景和 3 组包结构检查**。前者覆盖七个模块及 OIerDb 的 24 条获奖记录示例；会话检查使用真实 HttpOnly Cookie、本地登录重定向、普通跳转和 PJAX，不拦截模拟 OJ 的 fetch 响应。全部检查均不需要真实 OJ 账号，输出在 `tests/output/`。
 
 验证记录见 [`docs/validation-result.json`](docs/validation-result.json)。这些检查不代表已经完成 HLOJ 登录态实测；站点特有模板或权限差异仍可能影响实际效果。
 
@@ -128,7 +132,7 @@ npm run package:source:check
 
 解压后，将目录内的文件上传到你的仓库根目录，包括 `.github`、`.gitignore` 和 `.gitattributes`。源码、构建产物、说明和测试已分开整理。
 
-推送与 `package.json` 一致的版本标签（如 `v2.5.3`）后，`release.yml` 先复用完整检查，再发布带版本的脚本、安装包、源码包及校验值。手动运行发布工作流时也必须选择对应标签；分支或不匹配的标签会被拒绝。相同版本的既有 Release 不会被覆盖。
+推送与 `package.json` 一致的版本标签（如 `v2.5.4`）后，`release.yml` 先复用完整检查，再发布带版本的脚本、安装包、源码包及校验值。手动运行发布工作流时也必须选择对应标签；分支或不匹配的标签会被拒绝。相同版本的既有 Release 不会被覆盖。
 
 更改功能后先构建、生成并提交新安装包，再运行检查与完整测试。发布工作流不会在分支 push 或 PR 时发布 Release。
 

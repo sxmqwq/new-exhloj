@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Extend HLOJ
 // @namespace    exhloj-local
-// @version      2.5.3
+// @version      2.5.4
 // @description  core/ui/captcha/remote-problem/contest-helper/juan-monitor/user；本地重制，无旧后端依赖。
 // @author       Extend HLOJ Dev Team (original); Local restoration
 // @match        *://oj.hailiangedu.com/*
@@ -47,9 +47,9 @@
   if (!(location.hostname === 'oj.hailiangedu.com' ||
       location.host === 'www.nfls.com.cn:10611' || /(^|\.)oifha\.com$/.test(location.hostname))) return;
   if (document.documentElement.dataset.exhlojCoreUi) return;
-  document.documentElement.dataset.exhlojCoreUi = '2.5.3';
+  document.documentElement.dataset.exhlojCoreUi = '2.5.4';
 
-  const VERSION = '2.5.3';
+  const VERSION = '2.5.4';
   const SETTINGS_KEY = 'exhloj.coreui.settings.v1';
   const CACHE_KEY = 'exhloj.coreui.cache.v1';
   const CAPTCHA_KEY = 'exhloj.local.captcha.history';
@@ -1171,6 +1171,15 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
     return result;
   }
   function problemKey() { const pdoc = current('pdoc'); return `${pdoc?.domainId || domainId()}/${pdoc?.docId ?? pdoc?._id ?? location.pathname}`; }
+  function qojTitleOrigin(title) {
+    if (typeof title !== 'string') return null;
+    const ids = new Set();
+    for (const match of title.normalize('NFKC').matchAll(/(?:^|[^a-z0-9_])QOJ\s*#?\s*(\d+)(?![a-z0-9_])/gi)) {
+      const id = Number(match[1]);
+      if (Number.isSafeInteger(id) && id > 0) ids.add(String(id));
+    }
+    return ids.size === 1 ? normalizeOrigin({ type: 'qoj', target: [...ids][0] }) : null;
+  }
   function inferOrigin() {
     const cache = cacheObject(), key = problemKey();
     const local = cache['exhloj.remoteOrigins'];
@@ -1189,7 +1198,7 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
       if (/^https:\/\/qoj\.ac\/problem\/\d+/i.test(href)) return normalizeOrigin({ type: 'qoj', target: href });
       if (/^https:\/\/atcoder\.jp\/contests\//i.test(href)) return normalizeOrigin({ type: 'atcoder', target: href });
     }
-    return null;
+    return qojTitleOrigin(pdoc.title);
   }
   function originLinks(origin) {
     if (!origin || origin.type === 'none') return [];
