@@ -1,6 +1,6 @@
 {
   "name": "extend-hloj-local",
-  "version": "2.6.0",
+  "version": "2.6.1",
   "description": "Extend HLOJ 本地重制版：core、ui、captcha、remote-problem、contest-helper、juan-monitor、user",
   "private": true,
   "engines": {
