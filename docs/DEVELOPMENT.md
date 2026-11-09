@@ -29,6 +29,7 @@
 - `core`、`broadcast`、`on`：事件与共用接口。
 - `recognizeCaptcha`、`runCaptcha`：验证码识别与折叠。
 - `remoteProblem`、`loadRemoteMeta`：题源读取和显示。
+- `LUOGU_DIFFICULTIES`：新版洛谷难度编号 0–8 的统一标签与配色，供原站资料和手动选择使用。2.6.1 实测 P10873 为 7、P10789 为 8；新体系见[洛谷更新日志](https://help.luogu.com.cn/release-note)。缓存用 `difficultyScale` 区分旧版，过期格式按需重读；未标记的手动配置按旧颜色将 5/6/7 转为 6/7/8，新格式不再转换。
 - `qojTitleOrigin`：仅从当前 `pdoc.title` 提取独立的 QOJ 编号；NFKC 规范化后合并同一编号，拒绝非正整数、超出安全整数和多编号冲突，作为 `inferOrigin` 的最后一层回退。自动结果不写入手动映射，页面更新时重新计算。
 - `workRequest`、`runWork`、`listPages`：串行请求、取消与限额。
 - `exportContestStatements`、`collectContestRecords`：比赛导出。

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Extend HLOJ
 // @namespace    exhloj-local
-// @version      2.6.0
+// @version      2.6.1
 // @description  core/ui/captcha/remote-problem/contest-helper/juan-monitor/user；本地重制，无旧后端依赖。
 // @author       Extend HLOJ Dev Team (original); Local restoration
 // @match        *://oj.hailiangedu.com/*
@@ -47,9 +47,9 @@
   if (!(location.hostname === 'oj.hailiangedu.com' ||
       location.host === 'www.nfls.com.cn:10611' || /(^|\.)oifha\.com$/.test(location.hostname))) return;
   if (document.documentElement.dataset.exhlojCoreUi) return;
-  document.documentElement.dataset.exhlojCoreUi = '2.6.0';
+  document.documentElement.dataset.exhlojCoreUi = '2.6.1';
 
-  const VERSION = '2.6.0';
+  const VERSION = '2.6.1';
   const SETTINGS_KEY = 'exhloj.coreui.settings.v1';
   const CACHE_KEY = 'exhloj.coreui.cache.v1';
   const CAPTCHA_KEY = 'exhloj.local.captcha.history';
@@ -804,8 +804,17 @@
 
   const REMOTE_KEY = 'exhloj.local.remote.cache';
   const CF_KEY = 'exhloj.local.cf.ratings';
-  const DIFFICULTY = ['暂无评定', '入门', '普及−', '普及/提高−', '普及+/提高', '提高+/省选−', '省选/NOI−', 'NOI/NOI+/CTSC'];
-  const DIFFICULTY_COLORS = ['#777', '#fe4c61', '#d47f00', '#987400', '#299522', '#2385c8', '#9d3dcf', '#0e1d69'];
+  const LUOGU_DIFFICULTY_SCALE = 2;
+  const LUOGU_DIFFICULTIES = [
+    ['暂无评定', '#777'], ['入门', '#fe4c61'], ['普及−', '#d47f00'], ['普及', '#987400'],
+    ['普及+/提高−', '#299522'], ['提高', '#147d85'], ['提高+/省选−', '#2385c8'], ['省选/NOI−', '#9d3dcf'], ['NOI/NOI+/CTS', '#0e1d69'],
+  ];
+  // 旧版的手动选择按颜色保留；原站响应已经使用新版编号。
+  const LEGACY_LUOGU_DIFFICULTIES = [0, 1, 2, 3, 4, 6, 7, 8];
+  function luoguDifficulty(value) {
+    const n = typeof value === 'number' ? value : typeof value === 'string' && /^\d+$/.test(value.trim()) ? Number(value) : NaN;
+    return Number.isInteger(n) && n >= 0 && n < LUOGU_DIFFICULTIES.length ? n : undefined;
+  }
   function cacheObject() { try { return validateCache(stored(CACHE_KEY, {})); } catch { return {}; } }
   function safeLink(value) {
     try { const url = new URL(value); return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password ? url.href : ''; }
@@ -844,7 +853,8 @@
     if (!target && type !== 'other') return null;
     const extra_links = (Array.isArray(value.extra_links) ? value.extra_links : []).slice(0, 20).filter(x => x && safeLink(x.link)).map(x => ({ name: String(x.name || x.link).slice(0, 150), link: safeLink(x.link) }));
     const result = { type, target, luoguId: lid, extra_links };
-    if (Number.isInteger(+value.difficulty) && +value.difficulty >= 0 && +value.difficulty <= 7) result.difficulty = +value.difficulty;
+    const id = luoguDifficulty(value.difficulty), difficulty = value.difficultyScale === undefined ? LEGACY_LUOGU_DIFFICULTIES[id] : value.difficultyScale === LUOGU_DIFFICULTY_SCALE ? id : undefined;
+    if (difficulty !== undefined) Object.assign(result, { difficulty, difficultyScale: LUOGU_DIFFICULTY_SCALE });
     return result;
   }
   function problemKey() { const pdoc = current('pdoc'); return `${pdoc?.domainId || domainId()}/${pdoc?.docId ?? pdoc?._id ?? location.pathname}`; }
@@ -941,16 +951,16 @@
   }
   async function luoguProblem(id, force = false) {
     const cache = stored(REMOTE_KEY, {}), cached = isObject(cache) ? cache[id] : null;
-    if (!force && cached?.time > Date.now() - 86400000 && isObject(cached.value)) return cached.value;
+    if (!force && cached?.difficultyScale === LUOGU_DIFFICULTY_SCALE && cached.time > Date.now() - 86400000 && isObject(cached.value)) return cached.value;
     const payload = parseLuogu(await externalText(`https://www.luogu.com.cn/problem/${encodeURIComponent(id)}`));
     const data = payload.data || payload.currentData || payload, problem = data.problem;
     if (!isObject(problem)) throw new Error('洛谷未返回题目资料，题号或访问权限可能不正确');
     const content = data.translations?.['zh-CN'] || data.translations?.zh || problem.content || problem.contenu || problem;
     const value = { id, title: problem.title || problem.name || content.name || id,
-      difficulty: Number.isInteger(+problem.difficulty) && +problem.difficulty <= 7 && +problem.difficulty >= 0 ? +problem.difficulty : undefined,
+      difficulty: luoguDifficulty(problem.difficulty),
       statement: statementMarkdown(problem, content, id) };
-    const next = Object.entries(isObject(cache) ? cache : {}).filter(([key, item]) => key !== id && item?.time > Date.now() - 86400000).sort((a, b) => a[1].time - b[1].time).slice(-14);
-    save(REMOTE_KEY, { ...Object.fromEntries(next), [id]: { time: Date.now(), value } });
+    const next = Object.entries(isObject(cache) ? cache : {}).filter(([key, item]) => key !== id && item?.difficultyScale === LUOGU_DIFFICULTY_SCALE && item.time > Date.now() - 86400000).sort((a, b) => a[1].time - b[1].time).slice(-14);
+    save(REMOTE_KEY, { ...Object.fromEntries(next), [id]: { time: Date.now(), difficultyScale: LUOGU_DIFFICULTY_SCALE, value } });
     return value;
   }
   let cfPromise;
@@ -1004,11 +1014,11 @@
     root.dataset.remoteView = state.id;
     const tools = el('div', { class: 'exhloj-remote-tools' });
     for (const link of originLinks(state.origin)) tools.append(el('a', { href: link.link, target: '_blank', rel: 'noopener noreferrer' }, link.name));
-    const difficulty = state.origin?.difficulty ?? state.problem?.difficulty;
+    const difficulty = luoguDifficulty(state.origin?.difficulty ?? state.problem?.difficulty);
     if (difficulty !== undefined) {
-      const chip = el('span', { class: 'exhloj-remote-chip', 'data-exh-difficulty': difficulty }, DIFFICULTY[difficulty] || '暂无评定');
-      if (settings.remoteColor === 'text') chip.style.color = DIFFICULTY_COLORS[difficulty];
-      if (settings.remoteColor === 'background') { chip.style.backgroundColor = DIFFICULTY_COLORS[difficulty]; chip.style.color = '#fff'; }
+      const [label, color] = LUOGU_DIFFICULTIES[difficulty], chip = el('span', { class: 'exhloj-remote-chip', 'data-exh-difficulty': difficulty }, label);
+      if (settings.remoteColor === 'text') chip.style.color = color;
+      if (settings.remoteColor === 'background') { chip.style.backgroundColor = color; chip.style.color = '#fff'; }
       tools.append(chip);
     }
     if (state.rating !== undefined) tools.append(el('span', { class: 'exhloj-remote-chip', 'data-exh-cf-rating': '' }, `CF *${state.rating}`));
@@ -1104,7 +1114,10 @@
     for (const [key, title, value] of [['target', '原站编号或原题链接', origin.target], ['luoguId', '对应洛谷题号（可留空）', origin.luoguId]]) {
       const label = el('label', {}, title); label.append(el('input', { id: `exhloj-origin-${key}`, type: 'text', class: 'exhloj-source-input', value: value || '' })); body.append(label);
     }
-    const label = el('label', {}, '手动难度（留空使用原站）'); label.append(el('input', { id: 'exhloj-origin-difficulty', type: 'number', min: 0, max: 7, value: origin.difficulty ?? '' })); body.append(label);
+    const label = el('label', {}, '难度 '), difficulty = el('select', { id: 'exhloj-origin-difficulty' });
+    difficulty.append(el('option', { value: '' }, '跟随原站'));
+    LUOGU_DIFFICULTIES.forEach(([name], id) => difficulty.append(el('option', { value: id }, name)));
+    difficulty.value = String(origin.difficulty ?? ''); label.append(difficulty); body.append(label);
     body.append(el('p', {}, '附加链接：每行“显示名,https://...”'));
     const extra = el('textarea', { id: 'exhloj-origin-extra' }); extra.value = (origin.extra_links || []).map(x => `${x.name},${x.link}`).join('\n'); body.append(extra);
     body.append(button('保存本地题源', 'remote-save-origin'), button('清除手动配置', 'remote-reset-origin'));
@@ -1117,7 +1130,10 @@
         luoguId: $('#exhloj-origin-luoguId').value, extra_links: [] };
       if (value.luoguId && !luoguId(value.luoguId)) throw new Error('对应洛谷题号的格式不正确');
       const diff = $('#exhloj-origin-difficulty').value;
-      if (diff !== '') { const n = +diff; if (!Number.isInteger(n) || n < 0 || n > 7) throw new Error('难度必须为 0–7 的整数'); value.difficulty = n; }
+      if (diff !== '') {
+        const difficulty = luoguDifficulty(diff); if (difficulty === undefined) throw new Error('请选择有效难度');
+        Object.assign(value, { difficulty, difficultyScale: LUOGU_DIFFICULTY_SCALE });
+      }
       for (const line of $('#exhloj-origin-extra').value.split('\n').filter(x => x.trim())) {
         const split = line.indexOf(',');
         if (split < 0 || !safeLink(line.slice(split + 1).trim())) throw new Error('附加链接格式错误');

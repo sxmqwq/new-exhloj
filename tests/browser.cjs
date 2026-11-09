@@ -375,6 +375,50 @@ async function check(name, work) {
     await g.page.waitForSelector('[data-exh-difficulty="1"]');
     assert.equal((await g.page.evaluate(() => window.__gm)).length, 0); await g.done();
   });
+  const luoguMeta = (pid, difficulty, name = pid) => ({ data: { problem: { pid, name, difficulty } } });
+  const hatsURL = 'https://www.luogu.com.cn/problem/P10873', hatsMeta = luoguMeta('P10873', 7, '[COTS 2022] 帽子 Šeširi');
+  await check('remote: current Luogu scale shows P10873 as purple and distinguishes the new cyan and black tiers', async () => {
+    for (const [pid, id, label, color] of [['P1080', 5, '提高', 'rgb(20, 125, 133)'], ['P5664', 6, '提高+/省选−', 'rgb(35, 133, 200)'],
+      ['P10873', 7, '省选/NOI−', 'rgb(157, 61, 207)'], ['P10789', 8, 'NOI/NOI+/CTS', 'rgb(14, 29, 105)']]) {
+      const url = `https://www.luogu.com.cn/problem/${pid}`;
+      const f = await fixture('problem_detail', remoteBody, originContext('luogu', pid), { storage: { 'exhloj.coreui.settings.v1': { remoteColor: 'background' } },
+        remote: { [url]: { text: `<script id="lentille-context" type="application/json">${JSON.stringify(pid === 'P10873' ? hatsMeta : luoguMeta(pid, id))}</script>` } } });
+      const badge = f.page.locator(`[data-exh-difficulty="${id}"]`); await badge.waitFor();
+      assert.equal(await badge.textContent(), label); assert.equal(await badge.evaluate(node => node.style.backgroundColor), color);
+      assert.equal(await f.page.locator(`#exhloj-local-remote a[href="${url}"]`).count(), 1); await f.done();
+    }
+    const f = await fixture('problem_detail', remoteBody, originContext('luogu', 'P10873'), { remote: { [hatsURL]: { json: luoguMeta('P10873', null) } } });
+    await f.page.waitForFunction(() => document.querySelector('.exhloj-remote-status')?.textContent.includes('已读取'));
+    assert.equal(await f.page.locator('[data-exh-difficulty]').count(), 0); await f.done();
+  });
+  await check('remote: a previous-scale cache is replaced by live metadata without modifying local user data', async () => {
+    const cacheKey = 'exhloj.local.remote.cache', localKey = 'exhloj.coreui.cache.v1', userData = JSON.stringify({ 'exhloj.user': { practice: { 7: 5 } } });
+    const old = { P10873: { time: Date.now(), value: { id: 'P10873', title: 'Older metadata', difficulty: 6, statement: '# Older metadata' } } };
+    const f = await fixture('problem_detail', remoteBody, originContext('luogu', 'P10873'), { storage: { [cacheKey]: old, [localKey]: userData }, remote: { [hatsURL]: { json: hatsMeta } } });
+    await f.page.waitForSelector('[data-exh-difficulty="7"]'); assert.equal((await f.page.evaluate(() => window.__gm)).length, 1);
+    const storage = await f.page.evaluate(() => window.__store); assert.equal(storage[localKey], userData); assert.equal(JSON.parse(storage[cacheKey]).P10873.value.difficulty, 7); await f.done();
+    const g = await fixture('problem_detail', remoteBody, originContext('luogu', 'P10873'), { storage });
+    await g.page.waitForSelector('[data-exh-difficulty="7"]'); assert.equal((await g.page.evaluate(() => window.__gm)).length, 0); await g.done();
+  });
+  await check('remote: legacy manual difficulty keeps its color and named overrides can be reset to the origin', async () => {
+    const context = originContext('luogu', 'P10873'), cacheKey = 'exhloj.coreui.cache.v1';
+    for (const [key, old, current] of [['exhloj.problemOriginCache', 5, 6], ['exhloj.remoteOrigins', 6, 7], ['exhloj.remoteOrigins', 7, 8]]) {
+      const stored = JSON.stringify({ [key]: { 'test/10': { type: 'luogu', target: 'P10873', difficulty: old } } });
+      const f = await fixture('problem_detail', remoteBody, context, { storage: { ...noAuto, [cacheKey]: stored } });
+      await f.page.waitForSelector(`[data-exh-difficulty="${current}"]`); await f.page.locator('[data-exh-action="remote-config"]').click();
+      const select = f.page.locator('#exhloj-origin-difficulty'); assert.equal(await select.inputValue(), String(current));
+      assert.equal(await f.page.evaluate(key => window.__store[key], cacheKey), stored);
+      if (old !== 6) { await f.done(); continue; }
+      await select.selectOption({ label: '提高' }); await f.page.locator('[data-exh-action="remote-save-origin"]').click();
+      await f.page.waitForSelector('[data-exh-difficulty="5"]');
+      const storage = await f.page.evaluate(() => window.__store); await f.done();
+      const g = await fixture('problem_detail', remoteBody, context, { storage, remote: { [hatsURL]: { json: hatsMeta } } });
+      await g.page.waitForSelector('[data-exh-difficulty="5"]'); await g.page.locator('[data-exh-action="remote-config"]').click();
+      await g.page.locator('#exhloj-origin-difficulty').selectOption({ label: '跟随原站' }); await g.page.locator('[data-exh-action="remote-save-origin"]').click();
+      assert.equal(await g.page.locator('[data-exh-difficulty]').count(), 0);
+      await g.page.locator('[data-exh-action="remote-meta"]').click(); await g.page.waitForSelector('[data-exh-difficulty="7"]'); await g.done();
+    }
+  });
   await check('remote: official CF API rating remains usable when Luogu returns 401', async () => {
     const api = JSON.parse(fs.readFileSync('tests/fixtures/cf-problems.response', 'utf8'));
     const expected = api.result.problems.find(p => p.contestId === 1 && p.index === 'A').rating;
@@ -426,9 +470,9 @@ async function check(name, work) {
     await f.page.locator('[data-exh-action="remote-config"]').click();
     await f.page.locator('#exhloj-origin-type').selectOption('codeforces');
     await f.page.locator('#exhloj-origin-target').fill('CF1234A');
-    await f.page.locator('#exhloj-origin-difficulty').fill('6');
+    await f.page.locator('#exhloj-origin-difficulty').selectOption('7');
     await f.page.locator('[data-exh-action="remote-save-origin"]').click();
-    await f.page.waitForSelector('[data-exh-difficulty="6"]');
+    await f.page.waitForSelector('[data-exh-difficulty="7"]');
     const cache = await f.page.evaluate(() => JSON.parse(window.__store['exhloj.coreui.cache.v1']));
     assert.deepEqual(cache['exhloj.user'], { keep: 1 }); assert.equal(cache['exhloj.remoteOrigins']['test/123'].target, 'CF1234A');
     const storage = await f.page.evaluate(() => window.__store); await f.done();
