@@ -47,6 +47,8 @@ npm run package:source:check
 
 - `DEFAULTS` / `normalizeSettings` / `openSettings`：设置和模块开关。
 - `remoteProblem` / `loadRemoteMeta`：题源与原站资料。`qojTitleOrigin` 仅识别当前题名中的独立 QOJ 编号。
+- `openSemanticSearch` / `semanticRequest` / `parseSearchResults`：原题机 POST JSON 与 CPRet GET JSON（其中候选 HTML 仅在惰性模板内解析）。输入明确提交后才请求，不附带凭据；按站点显示排名，默认不改写查询或调用重排。两个接口为上游网站自身使用的接口，变更或失败时保留打开原站的入口。
+- `selectSearchCandidate` / `configureOrigin`：候选进入可编辑的确认配置，保存前检查题目、账号与原有映射，防止旧结果覆盖新页面。搜索缓存仅在内存中保留最近八组查询。
 - `LUOGU_DIFFICULTIES`：新版洛谷难度 0–8。`difficultyScale` 区分缓存和手动配置版本，旧手动设置按原颜色转换。
 - `runWork` / `workRequest` / `listPages`：串行请求、取消与请求限额。
 - `exportContestStatements` / `collectContestRecords`：比赛导出。

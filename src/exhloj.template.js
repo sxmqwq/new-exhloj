@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Extend HLOJ
 // @namespace    exhloj-local
-// @version      2.7.0
+// @version      2.8.0
 // @description  HLOJ 训练助手：题源与难度、比赛、练习统计、用户资料和 Rating。
 // @homepageURL  https://github.com/sxmqwq/new-exhloj
 // @supportURL   https://github.com/sxmqwq/new-exhloj/issues
@@ -24,6 +24,8 @@
 // @connect      www.luogu.com.cn
 // @connect      codeforces.com
 // @connect      qoj.ac
+// @connect      yuantiji.ac
+// @connect      cpret.online
 // @connect      oier.api.baoshuo.dev
 // ==/UserScript==
 
@@ -35,12 +37,13 @@
  *       captcha 本地 SVG 识别；remote-problem 题源/难度/翻译/题解/导出；
  *       contest-helper 比赛导出与可选报名；juan-monitor 练习统计与本地快照；user 本地资料和 Rating。
  * 请求：当前 OJ 的页面 JSON（GET）；导出附件时 POST 获取下载链接，报名时 POST attend；
- *       自动报名默认关闭。保存头像及发送 CPH / CP Editor 时才执行对应 POST。题源模块只读取原站；
+ *       自动报名默认关闭。保存头像及发送 CPH / CP Editor 时才执行对应 POST。
+ *       题意搜索只在点击后向所选的原题机 / CPRet 发送输入框内容，候选经确认后才保存为本地题源；
  *       验证码识别不联网、不自动提交登录；不访问原插件后端。
  *       user 按需 GET 榜单、用户名或 OIerDb 官方公开数据；资料编辑与 Rating 结算只保存到本地，无指定 UID 的管理员限制。
  * 缓存使用明文 JSON。旧版 AES 密文不在本版导入范围内；不读取旧 token/密码。
  * 此文件按原 1.16.1 的功能重制，内嵌 marked / DOMPurify / KaTeX / marked-katex-extension 和离线拼音字典 pinyin-pro（第三方许可证随 ZIP 提供）；
- * 无远程依赖和远程更新地址。升级建议在油猴编辑器中替换现有脚本全文，以保留存储。
+ * 无远程代码依赖，使用本仓库的固定更新地址。更新现有脚本会保留存储。
  * 若作为新脚本安装，请停用旧版，并按需导入之前的 JSON 备份。
  */
 
@@ -51,9 +54,9 @@
   if (!(location.hostname === 'oj.hailiangedu.com' ||
       location.host === 'www.nfls.com.cn:10611' || /(^|\.)oifha\.com$/.test(location.hostname))) return;
   if (document.documentElement.dataset.exhlojCoreUi) return;
-  document.documentElement.dataset.exhlojCoreUi = '2.7.0';
+  document.documentElement.dataset.exhlojCoreUi = '2.8.0';
 
-  const VERSION = '2.7.0';
+  const VERSION = '2.8.0';
   const SETTINGS_KEY = 'exhloj.coreui.settings.v1';
   const CACHE_KEY = 'exhloj.coreui.cache.v1';
   const CAPTCHA_KEY = 'exhloj.local.captcha.history';
@@ -232,6 +235,13 @@
     .exhloj-remote-tools{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:10px 0}
     .exhloj-remote-tools a,.exhloj-remote-chip{display:inline-block;padding:4px 9px;border-radius:5px;background:#f0f4f8;color:#245173}
     .exhloj-remote-status{font-size:12px;opacity:.8;flex-basis:100%;overflow-wrap:anywhere}
+    .exhloj-search-options{display:flex;flex-wrap:wrap;gap:0 20px}
+    .exhloj-search-note{color:#66788a;font-size:13px;overflow-wrap:anywhere}
+    .exhloj-search-candidate{border:1px solid #dce5ee;border-radius:8px;padding:12px 14px;margin:10px 0;overflow-wrap:anywhere}
+    .exhloj-search-candidate p{margin:4px 0}.exhloj-search-candidate a{color:#185b94}
+    .exhloj-search-candidate details{margin-top:8px}.exhloj-search-candidate pre{max-height:180px;overflow:auto;font:inherit}
+    .exhloj-search-status{white-space:pre-wrap;overflow-wrap:anywhere}
+    #exhloj-local-dialog #exhloj-search-query{height:140px;font:inherit;padding:10px;border:1px solid #b5bfca;border-radius:7px}
     .exhloj-remote-article{margin:12px 0;padding:16px;border:1px solid #d8e0e8;border-radius:8px;overflow-wrap:anywhere}
     .exhloj-remote-article pre{overflow:auto;white-space:pre}.exhloj-remote-article img{max-width:100%}
     .exhloj-work-progress{padding:8px 12px;background:#eef5fb;border-radius:6px;white-space:pre-wrap;overflow-wrap:anywhere}
@@ -305,6 +315,7 @@
   }
   function openRemoteTools() {
     const body = modal('题源与难度', 'remote');
+    body.append(button('按题意搜索原题', 'remote-search'), el('p', { class: 'exhloj-search-note' }, '输入题面或简述，在原题机和 CPRet 中查找候选，核对后再关联。'));
     const label = el('label', {}, '洛谷题号或链接'); label.append(el('input', { id: 'exhloj-luogu-id', class: 'exhloj-source-input', type: 'text', placeholder: '例如 P10873', 'aria-label': '洛谷题号' }));
     body.append(label, button('打开洛谷工具', 'luogu-tool'));
     if (current('pdoc')) body.append(el('h3', {}, '当前题目'), button('配置当前题源', 'remote-config'));
@@ -1042,6 +1053,195 @@
     }
     return cache.ratings[id];
   }
+  const SEARCH_ENGINES = Object.freeze({
+    yuantiji: { name: '原题机', home: 'https://yuantiji.ac/', endpoint: 'https://yuantiji.ac/api/search' },
+    cpret: { name: 'CPRet', home: 'https://cpret.online/', endpoint: 'https://cpret.online/api/search' },
+  });
+  const semanticCache = new Map();
+  let semanticPanel;
+  function searchCandidate(value) {
+    if (!isObject(value)) return null;
+    const link = safeLink(value.url);
+    if (!link) return null;
+    const url = new URL(link), host = url.hostname.toLowerCase().replace(/^www\./, ''), path = url.pathname;
+    let origin;
+    if (host === 'luogu.com.cn' && /^\/problem\/[^/]+\/?$/.test(path)) origin = normalizeOrigin({ type: 'luogu', target: path.split('/')[2] });
+    else if (host === 'codeforces.com' && /^\/(?:problemset\/problem\/\d+\/[a-z]\d?|(?:contest|gym)\/\d+\/problem\/[a-z]\d?)\/?$/i.test(path)) origin = normalizeOrigin({ type: 'codeforces', target: `https://codeforces.com${path}` });
+    else if (host === 'qoj.ac' && /^\/problem\/\d+(?:\/|$)/.test(path)) origin = normalizeOrigin({ type: 'qoj', target: path.split('/')[2] });
+    else if (host === 'atcoder.jp' && /^\/contests\/[\w-]+\/tasks\/[\w-]+\/?$/.test(path)) origin = normalizeOrigin({ type: 'atcoder', target: `https://atcoder.jp${path}` });
+    const title = String(value.title || url.hostname).slice(0, 300), source = String(value.source || url.hostname).slice(0, 80);
+    origin ||= normalizeOrigin({ type: 'other', extra_links: [{ name: title, link }] });
+    const canonical = originLinks(origin).find(row => new URL(row.link).hostname.replace(/^www\./, '') === host)?.link || link;
+    return { title, source, url: canonical, origin, score: Number.isFinite(value.score) ? value.score : null,
+      snippet: typeof value.snippet === 'string' ? value.snippet.slice(0, 5000) : '', alternatives: [] };
+  }
+  function parseSearchResults(engine, data) {
+    if (!isObject(data)) throw new Error('返回格式已变化，请打开网站检索');
+    let rows;
+    if (engine === 'yuantiji') {
+      if (!Array.isArray(data.results)) throw new Error('未返回候选列表，请打开原题机检索');
+      rows = data.results.slice(0, 20).map(row => isObject(row) ? {
+        title: row.title, source: row.src, url: row.url, score: row.cos, snippet: row.t0 || row.original,
+        alternatives: (Array.isArray(row.also) ? row.also : []).slice(0, 8).filter(isObject).map(other => ({ title: other.uid, url: other.url })),
+      } : null);
+    } else {
+      if (typeof data.html !== 'string' || !Number.isSafeInteger(data.total) || data.total < 0) throw new Error('返回格式已变化，请打开 CPRet 检索');
+      // 模板内容仅在惰性 DOM 内解析，绝不将外站 HTML、图片或脚本插入当前页面。
+      const template = document.createElement('template'); template.innerHTML = data.html;
+      const cards = [...template.content.querySelectorAll('.result-list > .result-card')].slice(0, 20);
+      if (data.total && !cards.length) throw new Error('未识别到候选列表，请打开 CPRet 检索');
+      const read = (node, selector) => node.querySelector(selector)?.textContent?.trim() || '';
+      rows = cards.map(card => ({ title: read(card, '.result-title'), source: read(card, '.result-meta > .oj-tag'),
+        url: card.querySelector('.result-title')?.getAttribute('href'), score: parseFloat(read(card, '.score-col > .score-num')),
+        alternatives: [...card.querySelectorAll('.dups li')].slice(0, 8).map(other => ({ title: read(other, 'a.t'), source: read(other, '.oj-tag'),
+          url: other.querySelector('a.t')?.getAttribute('href'), score: parseFloat(read(other, '.num')) })),
+      }));
+    }
+    const results = [], seen = new Set();
+    for (const row of rows) {
+      const candidate = searchCandidate(row);
+      if (!candidate || seen.has(candidate.url)) continue;
+      seen.add(candidate.url);
+      const alternatives = new Set([candidate.url]);
+      for (const other of row.alternatives || []) {
+        const value = searchCandidate(other);
+        if (value && !alternatives.has(value.url)) { alternatives.add(value.url); candidate.alternatives.push(value); }
+      }
+      results.push(candidate);
+    }
+    if (rows.length && !results.length) throw new Error('候选中没有有效原题链接，请打开网站检索');
+    return results;
+  }
+  function semanticRequest(engine, query, signal) {
+    const service = SEARCH_ENGINES[engine];
+    if (!service) return Promise.reject(new Error('未知的检索网站'));
+    const address = new URL(service.endpoint), post = engine === 'yuantiji';
+    if (!post) {
+      address.search = new URLSearchParams({ q: query, lang: 'zh', page: '1', dedup: '1', mmr: '0' }).toString();
+      if (address.href.length > 7500) return Promise.reject(new Error('题意过长，请精简后重试 CPRet，或使用原题机；本次没有向 CPRet 发送请求'));
+    }
+    return new Promise((resolve, reject) => {
+      let settled = false, request;
+      const finish = (fn, value) => { if (settled) return; settled = true; clearTimeout(timer); signal.removeEventListener('abort', abort); fn(value); };
+      const abort = () => { finish(reject, new Error('已停止搜索')); request?.abort?.(); };
+      const timer = setTimeout(() => { finish(reject, new Error('检索超时，可重试或打开网站搜索')); request?.abort?.(); }, 46000);
+      if (signal.aborted) { abort(); return; }
+      signal.addEventListener('abort', abort, { once: true });
+      try {
+        request = GM_xmlhttpRequest({ method: post ? 'POST' : 'GET', url: address.href, anonymous: true, timeout: 45000,
+          headers: { Accept: 'application/json', ...(post ? { 'Content-Type': 'application/json' } : {}) },
+          ...(post ? { data: JSON.stringify({ query, k: 20, rewrite: false, rerank: false, skip_short: false }) } : {}),
+          onload(response) {
+            try {
+              if (response.finalUrl && new URL(response.finalUrl).origin !== address.origin) throw new Error('检索跳转到了其他网站，请打开原站查看');
+              if (response.status === 429) throw new Error('网站请求较多，请稍后再试');
+              if (response.status === 414) throw new Error('题意过长，请缩短后重试');
+              if (response.status < 200 || response.status >= 300) throw new Error(`网站返回 HTTP ${response.status}，可打开原站查看`);
+              const text = response.responseText ?? response.response;
+              if (typeof text !== 'string' || text.length > 2 * 1024 * 1024) throw new Error('返回内容过大或无效');
+              let data; try { data = JSON.parse(text); } catch { throw new Error('网站未返回检索数据，可能需要验证；请打开原站查看'); }
+              finish(resolve, parseSearchResults(engine, data));
+            } catch (error) { finish(reject, error); }
+          }, onerror: () => finish(reject, new Error('无法连接检索网站，请检查网络与油猴的跨站权限')),
+          ontimeout: () => finish(reject, new Error('检索超时，可重试或打开网站搜索')),
+          onabort: () => finish(reject, new Error('已停止搜索')),
+        });
+      } catch (error) { finish(reject, error); }
+    });
+  }
+  function assertSearchPanel(state) {
+    if (!settings.remote || !state || state !== semanticPanel || !state.body.isConnected || !state.dialog.open || !sameOriginContext(state.context)) throw new Error('题目、账号或面板已变化，请重新打开原题搜索');
+  }
+  function renderSearchResults(state) {
+    if (!state.body.isConnected || !state.dialog.open) return;
+    const root = $('#exhloj-search-results', state.body); root.replaceChildren(); state.candidates.clear();
+    let valid = true; try { assertSearchPanel(state); } catch { valid = false; }
+    if (state.query !== undefined && $('#exhloj-search-query', state.body).value.trim() !== state.query) {
+      valid = false; root.append(el('p', { role: 'status' }, '题意已修改，以下为上次搜索的候选；请重新搜索后关联。'));
+    }
+    const appendCandidate = (parent, row, id, rank) => {
+      state.candidates.set(id, row);
+      const card = el('article', { class: 'exhloj-search-candidate', 'data-search-candidate': id });
+      card.append(el('strong', {}, rank + ' '), el('a', { href: row.url, target: '_blank', rel: 'noopener noreferrer', referrerpolicy: 'no-referrer' }, row.title));
+      card.append(el('p', { class: 'exhloj-search-note' }, `${row.source}${row.score === null ? '' : ` · 相似度 ${row.score.toFixed(4)}`}`));
+      if (row.snippet) { const details = el('details'); details.append(el('summary', {}, '查看候选题意'), el('pre', {}, row.snippet)); card.append(details); }
+      if (state.context.key) card.append(button('核对并关联', 'remote-search-select', { 'data-search-id': id, ...(!valid ? { disabled: '' } : {}) }));
+      if (row.alternatives.length) {
+        const details = el('details'); details.append(el('summary', {}, `同组候选（${row.alternatives.length}，仍需逐题核对）`));
+        row.alternatives.forEach((other, index) => appendCandidate(details, other, `${id}-${index}`, '↳')); card.append(details);
+      }
+      parent.append(card);
+    };
+    for (const [engine, group] of Object.entries(state.groups)) {
+      const section = el('section', { 'data-search-engine-results': engine });
+      section.append(el('h3', {}, SEARCH_ENGINES[engine].name), el('p', { class: 'exhloj-search-status', role: 'status' }, group.message));
+      group.rows.forEach((row, index) => appendCandidate(section, row, `${engine}-${index}`, `${index + 1}.`)); root.append(section);
+    }
+  }
+  function openSemanticSearch() {
+    if (!settings.remote) throw new Error('请先在设置中开启题源与题解');
+    const body = modal('按题意搜索原题', 'remote'), context = originContext();
+    const state = { body, dialog: body.closest('dialog'), context, groups: {}, candidates: new Map(), controller: null };
+    semanticPanel = state;
+    body.append(el('p', {}, context.key ? `当前题目：${current('pdoc').title || current('pdoc').pid || context.key}` : '可搜索相似题。在题目页打开此工具，才能将候选关联到当前题目。'));
+    const label = el('label', { for: 'exhloj-search-query' }, '题面或题意简述'), input = el('textarea', { id: 'exhloj-search-query', placeholder: '保留要求计算的内容、操作与限制；也可直接粘贴题面。' });
+    input.value = markdownContent(current('pdoc')?.content || '').trim();
+    input.addEventListener('input', () => renderSearchResults(state));
+    body.append(label, input, el('p', { class: 'exhloj-search-note' }, '点击搜索才会把此框内容发送到勾选的网站。建议精简长题面；CPRet 最多处理 2048 token。'));
+    const options = el('div', { class: 'exhloj-search-options' });
+    for (const [engine, service] of Object.entries(SEARCH_ENGINES)) {
+      const label = el('label'), checkbox = el('input', { type: 'checkbox', 'data-search-engine': engine }); checkbox.checked = true; label.append(checkbox, service.name); options.append(label);
+    }
+    body.append(options, button('开始搜索', 'remote-search-run'), button('停止搜索', 'remote-search-cancel', { disabled: '' }), button('复制题意', 'remote-search-copy'));
+    if (context.key) body.append(button('重新载入当前题面', 'remote-search-fill'));
+    const links = el('p', { class: 'exhloj-panel-footer' });
+    for (const service of Object.values(SEARCH_ENGINES)) links.append(el('a', { href: service.home, target: '_blank', rel: 'noopener noreferrer', referrerpolicy: 'no-referrer' }, `打开 ${service.name}`));
+    body.append(links, el('p', { class: 'exhloj-search-note' }, '结果按网站分别排序，分数不能跨网站比较。相似度不代表同题，请核对题意、数据范围和样例后再保存。'), el('div', { id: 'exhloj-search-results', 'aria-live': 'polite' }));
+    state.dialog.addEventListener('close', () => state.controller?.abort(), { once: true });
+  }
+  async function fillSearchStatement() {
+    const state = semanticPanel; assertSearchPanel(state);
+    const input = $('#exhloj-search-query', state.body), before = input.value, pdoc = await problemDocument();
+    assertSearchPanel(state);
+    if (input.value !== before) throw new Error('你已编辑题意，保留当前输入');
+    input.value = markdownContent(pdoc.content || '').trim();
+    renderSearchResults(state);
+  }
+  async function runSemanticSearch() {
+    const state = semanticPanel; assertSearchPanel(state);
+    if (state.controller) return;
+    const query = $('#exhloj-search-query', state.body).value.trim(), engines = $$('[data-search-engine]:checked', state.body).map(node => node.dataset.searchEngine);
+    if (!query) throw new Error('请先输入题面或题意');
+    if (query.length > 16000) throw new Error('题意超过 16000 字符，请精简后再搜索；未发送请求');
+    if (!engines.length) throw new Error('请至少选择一个检索网站');
+    const controller = new AbortController(); state.controller = controller; state.query = query;
+    state.groups = Object.fromEntries(engines.map(engine => [engine, { rows: [], message: '正在搜索…' }]));
+    const controls = [$('#exhloj-search-query', state.body), ...$$('[data-search-engine], [data-exh-action="remote-search-run"], [data-exh-action="remote-search-fill"]', state.body)];
+    controls.forEach(node => { node.disabled = true; }); $('[data-exh-action="remote-search-cancel"]', state.body).disabled = false; renderSearchResults(state);
+    try {
+      await Promise.allSettled(engines.map(async engine => {
+        const group = state.groups[engine], key = JSON.stringify([engine, query]);
+        try {
+          const cached = semanticCache.get(key), rows = cached || await semanticRequest(engine, query, controller.signal);
+          assertSearchPanel(state); if (controller.signal.aborted) throw new Error('已停止搜索');
+          group.rows = rows; group.message = rows.length ? `前 ${rows.length} 条候选${cached ? ' · 复用本次页面的搜索结果' : ''}` : '未找到可用候选，可调整题意或打开网站查看';
+          if (!cached) { semanticCache.set(key, rows); if (semanticCache.size > 8) semanticCache.delete(semanticCache.keys().next().value); }
+        } catch (error) { group.message = error.message || '检索失败，可重试或打开网站查看'; }
+        renderSearchResults(state);
+      }));
+    } finally {
+      state.controller = null; controls.forEach(node => { node.disabled = false; }); $('[data-exh-action="remote-search-cancel"]', state.body).disabled = true;
+    }
+  }
+  function selectSearchCandidate(control) {
+    const state = semanticPanel; assertSearchPanel(state);
+    if (!state.context.key) throw new Error('请在需要关联的题目页搜索');
+    if ($('#exhloj-search-query', state.body).value.trim() !== state.query) throw new Error('题意已修改，请重新搜索后关联');
+    const candidate = state.candidates.get(control.dataset.searchId);
+    if (!candidate) throw new Error('候选列表已变化，请重新选择');
+    state.controller?.abort(); configureOrigin(candidate.origin, candidate.title);
+  }
+
   const remoteViews = new Map();
   let remoteState, remoteCounter = 0, remotePending = false, contestRevealed = false;
   function makeRemoteState(origin, local = false) {
@@ -1086,7 +1286,7 @@
     if (state.rating !== undefined) tools.append(el('span', { class: 'exhloj-remote-chip', 'data-exh-cf-rating': '' }, `CF *${state.rating}`));
     if (state.origin?.luoguId || cfId(state.origin?.target)) tools.append(button('读取 / 刷新难度', 'remote-meta'));
     if (state.origin?.luoguId) tools.append(button('题面 / 翻译', 'remote-statement'), button('查看洛谷题解', 'remote-solutions'), button('导出已加载内容', 'remote-export'));
-    if (state.local) tools.append(button('配置题源', 'remote-config'));
+    if (state.local) tools.append(button('按题意搜索原题', 'remote-search'), button('配置题源', 'remote-config'));
     if (!state.origin || state.origin.type === 'none') tools.append(el('span', {}, state.origin?.type === 'none' ? '已停用此题的自动题源识别' : '未识别题源；可在本机配置'));
     if (state.messages.length) tools.append(el('div', { class: 'exhloj-remote-status', role: 'status' }, state.messages.join('；')));
     root.replaceChildren(tools);
@@ -1166,9 +1366,17 @@
     const state = makeRemoteState(origin, true); state.signature = signature; state.root = root; remoteState = state; renderRemote(state);
     if (settings.remoteAuto && origin?.type !== 'none' && (origin?.luoguId || origin?.type === 'codeforces')) loadRemoteMeta(state);
   }
-  function configureOrigin() {
-    const origin = remoteState?.origin || inferOrigin() || { type: 'luogu', target: '', extra_links: [] };
+  let originEditor;
+  function originContext() { return { key: current('pdoc') ? problemKey() : null, epoch: routeEpoch, address: location.href, owner: String(user()._id || 0) }; }
+  function sameOriginContext(context) {
+    return context && context.epoch === routeEpoch && context.address === location.href && context.owner === String(user()._id || 0) && context.key === (current('pdoc') ? problemKey() : null);
+  }
+  function configureOrigin(suggested, candidateTitle = '') {
+    if (!settings.remote || !current('pdoc')) throw new Error('请在需要关联的题目页配置题源');
+    const origin = suggested || remoteState?.origin || inferOrigin() || { type: 'luogu', target: '', extra_links: [] };
     const body = modal('本地题源配置', 'remote');
+    originEditor = { body, context: originContext(), baseline: JSON.stringify(cacheObject()['exhloj.remoteOrigins']?.[problemKey()] ?? null) };
+    if (suggested) body.append(el('p', {}, `候选：${candidateTitle}`), el('p', {}, '请核对题意、数据范围和样例。确认并保存后，将使用下面的配置替换此题的本地题源。'));
     body.append(el('p', {}, `只保存到本机。题目键：${problemKey()}。普通本地 P 题号不会被自动当成洛谷题号。`));
     const type = el('select', { id: 'exhloj-origin-type' });
     for (const [id, label] of [['luogu', '洛谷'], ['codeforces', 'Codeforces'], ['qoj', 'QOJ'], ['atcoder', 'AtCoder'], ['other', '其他链接'], ['none', '停用此题识别']]) type.append(el('option', { value: id }, label));
@@ -1182,10 +1390,12 @@
     difficulty.value = String(origin.difficulty ?? ''); label.append(difficulty); body.append(label);
     body.append(el('p', {}, '附加链接：每行“显示名,https://...”'));
     const extra = el('textarea', { id: 'exhloj-origin-extra' }); extra.value = (origin.extra_links || []).map(x => `${x.name},${x.link}`).join('\n'); body.append(extra);
-    body.append(button('保存本地题源', 'remote-save-origin'), button('清除手动配置', 'remote-reset-origin'));
+    body.append(button(suggested ? '确认并保存题源' : '保存本地题源', 'remote-save-origin'), button('清除手动配置', 'remote-reset-origin'));
   }
   function saveOrigin(reset = false) {
+    if (!settings.remote || !originEditor?.body.isConnected || !originEditor.body.closest('dialog')?.open || !sameOriginContext(originEditor.context)) throw new Error('题目或账号已变化，请在当前题目重新打开题源配置');
     const cache = cacheObject(), map = isObject(cache['exhloj.remoteOrigins']) ? { ...cache['exhloj.remoteOrigins'] } : {};
+    if (JSON.stringify(map[problemKey()] ?? null) !== originEditor.baseline) throw new Error('此题的本地题源已修改，请重新打开配置');
     if (reset) delete map[problemKey()];
     else {
       const value = { type: $('#exhloj-origin-type').value, target: $('#exhloj-origin-target').value,
@@ -3065,6 +3275,12 @@
         }
         case 'remote-meta': await loadRemoteMeta(stateFor(control), true); break;
         case 'remote-config': configureOrigin(); break;
+        case 'remote-search': openSemanticSearch(); break;
+        case 'remote-search-run': await runSemanticSearch(); break;
+        case 'remote-search-cancel': semanticPanel?.controller?.abort(); break;
+        case 'remote-search-copy': assertSearchPanel(semanticPanel); await copyText($('#exhloj-search-query').value); break;
+        case 'remote-search-fill': await fillSearchStatement(); break;
+        case 'remote-search-select': selectSearchCandidate(control); break;
         case 'remote-save-origin': saveOrigin(); break;
         case 'remote-reset-origin': saveOrigin(true); break;
         case 'luogu-tool': openLuoguTool($('#exhloj-luogu-id').value); break;
@@ -3131,6 +3347,8 @@
       const accountChanged = owner !== routeOwner;
       route = location.href; routeOwner = owner; routeName = name;
       routeEpoch++; contextBody = {}; pageRequest = undefined;
+      semanticPanel?.controller?.abort();
+      if (semanticPanel?.body.isConnected) renderSearchResults(semanticPanel);
       if (accountChanged) for (const job of workJobs.values()) job.controller.abort();
       workJobs.get('user')?.controller.abort(); ratingTimeline = undefined;
       if (workJobs.get('oier')?.quick) workJobs.get('oier').controller.abort();
