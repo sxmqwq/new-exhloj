@@ -1,7 +1,7 @@
 {
   "name": "extend-hloj-local",
-  "version": "2.6.1",
-  "description": "Extend HLOJ 本地重制版：core、ui、captcha、remote-problem、contest-helper、juan-monitor、user",
+  "version": "2.7.0",
+  "description": "HLOJ 训练助手：题源、比赛、练习统计、用户资料和 Rating",
   "private": true,
   "engines": {
     "node": ">=24"

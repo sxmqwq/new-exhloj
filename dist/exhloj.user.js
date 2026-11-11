@@ -1,8 +1,12 @@
 // ==UserScript==
 // @name         Extend HLOJ
 // @namespace    exhloj-local
-// @version      2.6.1
-// @description  core/ui/captcha/remote-problem/contest-helper/juan-monitor/user；本地重制，无旧后端依赖。
+// @version      2.7.0
+// @description  HLOJ 训练助手：题源与难度、比赛、练习统计、用户资料和 Rating。
+// @homepageURL  https://github.com/sxmqwq/new-exhloj
+// @supportURL   https://github.com/sxmqwq/new-exhloj/issues
+// @updateURL    https://raw.githubusercontent.com/sxmqwq/new-exhloj/main/dist/exhloj.user.js
+// @downloadURL  https://raw.githubusercontent.com/sxmqwq/new-exhloj/main/dist/exhloj.user.js
 // @author       Extend HLOJ Dev Team (original); Local restoration
 // @match        *://oj.hailiangedu.com/*
 // @match        *://www.nfls.com.cn/*
@@ -47,9 +51,9 @@
   if (!(location.hostname === 'oj.hailiangedu.com' ||
       location.host === 'www.nfls.com.cn:10611' || /(^|\.)oifha\.com$/.test(location.hostname))) return;
   if (document.documentElement.dataset.exhlojCoreUi) return;
-  document.documentElement.dataset.exhlojCoreUi = '2.6.1';
+  document.documentElement.dataset.exhlojCoreUi = '2.7.0';
 
-  const VERSION = '2.6.1';
+  const VERSION = '2.7.0';
   const SETTINGS_KEY = 'exhloj.coreui.settings.v1';
   const CACHE_KEY = 'exhloj.coreui.cache.v1';
   const CAPTCHA_KEY = 'exhloj.local.captcha.history';
@@ -181,17 +185,36 @@
       background:#234537;color:white;padding:12px 20px;border-radius:8px;max-width:90vw;box-shadow:0 4px 20px #0003}
     #exhloj-local-toast[data-error="true"]{background:#842d2d}
     #exhloj-local-dialog{color:#263445;background:#fff;border:1px solid #c7d0d9;border-radius:12px;
-      width:min(720px,92vw);max-height:85vh;padding:0;box-shadow:0 10px 50px #0004}
+      width:min(840px,92vw);max-height:85vh;padding:0;box-shadow:0 10px 50px #0004;box-sizing:border-box;
+      font:14px/1.6 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei","Noto Sans CJK SC",sans-serif}
+    #exhloj-local-dialog[open]{display:flex;flex-direction:column}
     #exhloj-local-dialog::backdrop{background:#0006}
-    #exhloj-local-dialog header{display:flex;align-items:center;justify-content:space-between;padding:16px 22px;border-bottom:1px solid #ddd}
+    #exhloj-local-dialog header{display:flex;align-items:center;justify-content:space-between;padding:16px 22px;flex-shrink:0;gap:12px}
     #exhloj-local-dialog h2{margin:0;font-size:21px}#exhloj-local-dialog h3{margin:20px 0 10px}
-    #exhloj-local-dialog .exhloj-dialog-body{padding:5px 22px 22px;overflow:auto;max-height:65vh;font-size:14px;line-height:1.7}
+    #exhloj-local-dialog .exhloj-dialog-body{padding:12px 22px 22px;overflow:auto;min-height:0;font-size:14px;line-height:1.7}
+    .exhloj-panel-brand{font-size:12px;color:#66788a;margin-bottom:3px}
+    .exhloj-panel-nav{display:flex;flex-wrap:wrap;gap:4px;padding:0 18px 12px;border-bottom:1px solid #e3e9ef;flex-shrink:0}
+    #exhloj-local-dialog .exhloj-panel-tab{border:0;border-radius:7px;padding:7px 12px;background:transparent;color:#52667a;cursor:pointer;font:inherit}
+    #exhloj-local-dialog .exhloj-panel-tab[aria-current=page]{background:#eaf2fb;color:#185b94;font-weight:700}
+    #exhloj-local-dialog .exhloj-panel-tab:hover{background:#f0f5fa}
+    .exhloj-panel-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:16px 0}
+    #exhloj-local-dialog .exhloj-panel-card{border:1px solid #dce5ee;border-radius:10px;padding:18px;background:#fff;color:#263445;text-align:left;font:inherit;cursor:pointer;min-width:0}
+    #exhloj-local-dialog .exhloj-panel-card:hover{border-color:#6c9ec9;background:#f6faff}
+    #exhloj-local-dialog .exhloj-panel-card strong{display:block;font-size:16px;margin-bottom:5px}
+    #exhloj-local-dialog .exhloj-panel-card span{display:block;color:#66788a;font-size:13px;line-height:1.7}
+    #exhloj-local-dialog .exhloj-panel-card:disabled{opacity:.55;cursor:default}
+    .exhloj-panel-summary{padding:12px 15px;background:#f4f7fa;border-radius:8px;color:#52667a}
+    .exhloj-panel-footer{font-size:12px;color:#66788a;display:flex;gap:16px;flex-wrap:wrap;margin-top:20px}
+    @media(max-width:520px){#exhloj-local-dialog header{padding:14px 16px}#exhloj-local-dialog .exhloj-dialog-body{padding:10px 16px 18px}.exhloj-panel-grid{grid-template-columns:1fr;gap:9px}.exhloj-panel-nav{padding:0 12px 9px}#exhloj-local-dialog .exhloj-panel-tab{padding:6px 10px}}
     #exhloj-local-dialog label{display:block;margin:9px 0}#exhloj-local-dialog input[type=checkbox]{margin-right:9px}
     #exhloj-local-dialog textarea{box-sizing:border-box;width:100%;height:150px;font:12px/1.6 monospace;color:#263445;background:#f7f9fb}
     #exhloj-local-dialog input[type=number]{width:90px;color:#263445;background:white;border:1px solid #aaa;padding:3px}
     #exhloj-local-dialog summary{cursor:pointer}#exhloj-local-dialog pre{white-space:pre-wrap;overflow-wrap:anywhere}
     #exhloj-local-dialog table{border-collapse:collapse;width:100%}#exhloj-local-dialog td,#exhloj-local-dialog th{padding:6px;text-align:left;border-bottom:1px solid #ddd}
     .exhloj-local-button{cursor:pointer;margin:4px 8px 4px 0;padding:6px 12px}
+    #exhloj-local-dialog .exhloj-local-button{border:1px solid #cbd6e1;border-radius:6px;background:#f5f8fb;color:#263445;font:inherit}
+    #exhloj-local-dialog .exhloj-local-button:hover{border-color:#6c9ec9;background:#edf4fb}
+    #exhloj-local-dialog .exhloj-local-button:disabled{opacity:.5;cursor:default}
     .exhloj-local-toolbar{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin:10px 0}
     .exhloj-local-medal{font-size:1.25em;vertical-align:middle}
     .exhloj-local-earliest{background-color:rgb(217,240,199)!important}
@@ -231,18 +254,61 @@
   `;
   document.head.append(baseStyle);
 
-  function modal(title) {
+  const PANEL_SECTIONS = [['home', '首页'], ['contest', '比赛'], ['juan', '卷王'], ['user', '用户'], ['remote', '题源'], ['settings', '设置'], ['data', '数据']];
+  let panelSection = 'home';
+  function modal(title, section = panelSection) {
     $('#exhloj-local-dialog')?.close();
     $('#exhloj-local-dialog')?.remove();
-    const dialog = el('dialog', { id: 'exhloj-local-dialog', 'aria-label': title });
+    panelSection = section;
+    const dialog = el('dialog', { id: 'exhloj-local-dialog', 'aria-label': `Extend HLOJ · ${title}`, 'data-panel-section': section });
     const header = el('header');
     const close = button('关闭', 'close');
-    header.append(el('h2', {}, title), close);
+    const heading = el('div'); heading.append(el('div', { class: 'exhloj-panel-brand' }, `Extend HLOJ ${VERSION}`), el('h2', {}, title)); header.append(heading, close);
+    const nav = el('nav', { class: 'exhloj-panel-nav', 'aria-label': '功能导航' });
+    for (const [id, label] of PANEL_SECTIONS) nav.append(el('button', { type: 'button', class: 'exhloj-panel-tab', 'data-exh-action': 'panel-tab', 'data-panel-tab': id, ...(id === section ? { 'aria-current': 'page' } : {}) }, label));
     const body = el('div', { class: 'exhloj-dialog-body' });
-    dialog.append(header, body); document.body.append(dialog);
+    dialog.append(header, nav, body); document.body.append(dialog);
     dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
     dialog.showModal();
     return body;
+  }
+  function openPanelSection(section) {
+    if (!PANEL_SECTIONS.some(row => row[0] === section)) return;
+    const module = { contest: 'contestHelper', juan: 'juanMonitor', user: 'userModule', remote: 'remote' }[section];
+    if (module && !settings[module]) {
+      const body = modal(PANEL_SECTIONS.find(row => row[0] === section)[1], section);
+      body.append(el('p', {}, '此功能已关闭，可在设置中开启。'), button('打开设置', 'panel-settings')); return;
+    }
+    const open = { home: openHome, contest: openContestHelper, juan: openJuanMonitor, user: openUserTools, remote: openRemoteTools, settings: openSettings, data: openDataTools }[section];
+    if (open) open();
+  }
+  function openHome() {
+    const body = modal('控制面板', 'home'), store = userStore();
+    body.append(el('p', { class: 'exhloj-panel-summary' }, `当前域：${domainId()} · ${+user()._id > 0 ? '已登录' : '游客'}　　${Object.keys(store.users.oiers).length} 份本地资料 · ${store.ratings.contests.length} 场 Rated 比赛`));
+    const cards = el('div', { class: 'exhloj-panel-grid' });
+    for (const [title, description, action, module] of [
+      ['比赛助手', '导出题面与提交记录，管理比赛报名。', 'contest-helper', 'contestHelper'],
+      ['卷王监视器', '汇总练习成绩，查看近期进度。', 'juan-open', 'juanMonitor'],
+      ['用户与 Rating', '管理个人资料、OIerDb 绑定和比赛 Rating。', 'user-open', 'userModule'],
+      ['题源与难度', '查看原题、洛谷难度、翻译和题解。', 'panel-remote', 'remote'],
+      ['设置', '调整界面、验证码和自动报名。', 'panel-settings', ''],
+      ['数据与备份', '导出备份，恢复设置和本地资料。', 'panel-data', ''],
+    ]) {
+      const disabled = module && !settings[module], card = el('button', { type: 'button', class: 'exhloj-panel-card', 'data-exh-action': action, ...(disabled ? { disabled: '' } : {}) });
+      card.append(el('strong', {}, title), el('span', {}, disabled ? '已关闭，可在设置中开启。' : description)); cards.append(card);
+    }
+    body.append(cards);
+    if (userLoadError) body.append(el('p', { class: 'exhloj-work-errors' }, `本地用户数据需要检查：${userLoadError}`));
+    const footer = el('div', { class: 'exhloj-panel-footer' });
+    for (const [label, url] of [['使用说明', 'https://github.com/sxmqwq/new-exhloj#readme'], ['更新记录', 'https://github.com/sxmqwq/new-exhloj/releases/latest']]) footer.append(el('a', { href: url, target: '_blank', rel: 'noopener noreferrer' }, label));
+    body.append(footer);
+  }
+  function openRemoteTools() {
+    const body = modal('题源与难度', 'remote');
+    const label = el('label', {}, '洛谷题号或链接'); label.append(el('input', { id: 'exhloj-luogu-id', class: 'exhloj-source-input', type: 'text', placeholder: '例如 P10873', 'aria-label': '洛谷题号' }));
+    body.append(label, button('打开洛谷工具', 'luogu-tool'));
+    if (current('pdoc')) body.append(el('h3', {}, '当前题目'), button('配置当前题源', 'remote-config'));
+    body.append(el('p', {}, '在题目页也可直接读取难度、查看原题和题解。'));
   }
   function download(name, content, type = 'application/json') {
     const url = URL.createObjectURL(new Blob([content], { type }));
@@ -283,15 +349,13 @@
     settings = nextSettings;
     refresh();
   }
-  function openSettings() {
-    const body = modal(`Extend HLOJ ${VERSION}`);
-    body.append(el('p', {}, '模块：core / ui / captcha / remote-problem / contest-helper / juan-monitor / user。core 始终启用。'));
-    const coreLabel = el('label'), coreInput = el('input', { type: 'checkbox', disabled: '' });
-    coreInput.checked = true; coreLabel.append(coreInput, 'core — 设置、缓存与事件系统'); body.append(coreLabel);
+  function openSettings(attendance = false) {
+    const body = modal('设置', 'settings');
+    body.append(el('h3', {}, '界面与功能'));
     const form = el('form', { id: 'exhloj-local-settings' });
     const moduleLabel = el('label');
     const moduleInput = el('input', { type: 'checkbox', name: 'ui' }); moduleInput.checked = settings.ui;
-    moduleLabel.append(moduleInput, 'ui — 界面增强'); form.append(moduleLabel);
+    moduleLabel.append(moduleInput, '界面增强'); form.append(moduleLabel);
     for (const [key, [text]] of Object.entries(OPTIONS)) {
       const label = el('label'), input = el('input', { type: 'checkbox', name: key });
       input.checked = settings.options[key]; label.append(input, text); form.append(label);
@@ -301,10 +365,10 @@
       label.append(text + ' ', el('input', { type: 'number', min: 1, max: 65535, name: key, value: settings[key], required: true }));
       form.append(label);
     }
-    for (const [key, text] of [['captcha', 'captcha — 本地验证码识别'], ['captchaHide', '识别成功后折叠验证码'],
-      ['captchaRemember', '识别成功后勾选“记住我”'], ['remote', 'remote-problem — 题源与题解工具'],
+    for (const [key, text] of [['captcha', '验证码识别'], ['captchaHide', '识别成功后折叠验证码'],
+      ['captchaRemember', '识别成功后勾选“记住我”'], ['remote', '题源与题解'],
       ['remoteAuto', '自动读取已识别题目的难度（缓存 24 小时）'],
-      ['contestHelper', 'contest-helper — 比赛助手'], ['juanMonitor', 'juan-monitor — 卷王监视器'], ['userModule', 'user — 本地用户资料与 Rating']]) {
+      ['contestHelper', '比赛助手'], ['juanMonitor', '卷王监视器'], ['userModule', '用户资料与 Rating']]) {
       const label = el('label'), input = el('input', { type: 'checkbox', name: key });
       input.checked = settings[key]; label.append(input, text); form.append(label);
     }
@@ -315,7 +379,8 @@
       for (const [value, title] of choices) select.append(el('option', { value }, title));
       select.value = settings[key]; label.append(select); form.append(label);
     }
-    const advanced = el('details'); advanced.append(el('summary', {}, '比赛助手 / 监视器参数'));
+    const advanced = el('details', { id: 'exhloj-attend-options' }); advanced.open = attendance;
+    advanced.append(el('summary', {}, '自动报名与请求参数'));
     for (const [key, title, min, max] of [['helperDelay', '请求间隔（毫秒）', 100, 5000], ['helperPageLimit', '每类列表最多页数', 1, 1000], ['helperRequestLimit', '单次任务最多请求数', 10, 10000], ['autoAttendInterval', '自动报名检查间隔（秒）', 10, 86400]]) {
       const label = el('label', {}, title + ' '); label.append(el('input', { type: 'number', name: key, value: settings[key], min, max, required: true })); advanced.append(label);
     }
@@ -327,24 +392,20 @@
       if (key === 'autoAttendTargets') { const field = el('textarea', { name: key, placeholder }); field.value = settings[key]; label.append(field); } else label.append(input);
       advanced.append(label);
     }
-    advanced.append(el('p', {}, '自动报名默认关闭。手动检查和报名入口在比赛助手中；筛选条件为普通文本，不执行脚本。'));
+    advanced.append(el('p', {}, '保存后保持 OJ 登录，并开着一个 OJ 页面，自动报名才会运行。'));
     form.append(advanced, button('保存设置', 'save-settings'), button('刷新页面', 'reload'));
-    body.append(form, el('h3', {}, '缓存与备份'));
-    body.append(button('验证码识别记录', 'captcha-history'));
-    const remoteRow = el('div');
-    remoteRow.append(el('input', { id: 'exhloj-luogu-id', type: 'text', placeholder: '洛谷题号，例如 P1001', 'aria-label': '洛谷题号' }), button('打开洛谷工具', 'luogu-tool'));
-    body.append(remoteRow);
-    body.append(button('比赛助手', 'contest-helper'), button('卷王监视器', 'juan-open'), button('用户工具', 'user-open'));
-    body.append(el('p', {}, '导出为明文 JSON。可导入本版备份或旧版缓存 JSON；不会导入密码、token。旧版 AES 密文暂不支持。'));
-    body.append(button('导出设置和缓存', 'export'), button('读取旧版缓存（同一脚本存储）', 'legacy'));
-    body.append(el('p', {}, '作为新脚本安装时无法访问另一脚本的油猴存储；旧缓存需要从旧版导出。保留的其他模块缓存不会恢复其服务器功能。'));
+    body.append(form, button('验证码识别记录', 'captcha-history'));
+    if (attendance) advanced.scrollIntoView({ block: 'start' });
+  }
+  function openDataTools() {
+    const body = modal('数据与备份', 'data');
+    body.append(el('h3', {}, '备份'), el('p', {}, '备份包括设置、题源配置、用户资料和 Rating。数据保存在当前浏览器中。'), button('导出完整备份', 'export'));
+    if (settings.userModule) body.append(button('仅导出用户与 Rating', 'user-export'));
+    body.append(el('h3', {}, '恢复'), el('p', {}, '选择备份文件或粘贴 JSON 后导入。支持本版及兼容的旧版 JSON 备份。'));
     body.append(el('input', { type: 'file', accept: '.json,application/json', id: 'exhloj-local-import-file', 'aria-label': '选择 JSON 备份' }));
     body.append(el('textarea', { id: 'exhloj-local-import', placeholder: '在此粘贴 JSON 备份', 'aria-label': '导入 JSON' }));
-    body.append(button('导入 JSON', 'import'), button('查看缓存', 'view-cache'));
-    const details = el('details'); details.append(el('summary', {}, '功能范围与故障信息'));
-    details.append(el('p', {}, '页面资料按需读取当前 OJ 的 JSON 接口。复制和榜单处理不访问第三方服务。CPH / CP Editor 只在点击后连接 localhost。'));
-    details.append(el('p', {}, 'captcha 复用原版字形表，无法识别时保留手动输入，不自动登录。题源工具使用本地映射与原站公开页面；题解读取受原站登录与访问权限限制。原站故障时仍可打开题源链接。'));
-    details.append(el('p', {}, '榜单绿色表示当前页面可见记录中按 ObjectId 时间判断的最早提交（秒级，同秒并列），不代表全站首个 AC。头像只有点击保存时才更新。'));
+    body.append(button('导入备份', 'import'), button('查看备份内容', 'view-cache'));
+    const details = el('details'); details.append(el('summary', {}, '兼容与故障信息'), button('读取同一脚本的旧缓存', 'legacy'));
     details.append(el('pre', {}, JSON.stringify({ version: VERSION, page: pageName(), domain: domainId(),
       hasUiContext: !!page.UiContext, hasHydro: !!page.Hydro, lastPageError }, null, 2)));
     body.append(details);
@@ -440,7 +501,8 @@
         if ((link.getAttribute('href') || '').includes('Error: No route found for name:')) link.closest('li')?.remove();
       }
     }
-    installWorkMenu(menu);
+    // 清除旧版分散插入的工具项，用户菜单只保留一个插件入口。
+    for (const item of $$('[data-exh-work-menu]', menu || document)) item.remove();
   }
   function niceSize(value) {
     const size = Number(value);
@@ -789,7 +851,7 @@
     }
   }
   function showCaptchaHistory() {
-    const body = modal('验证码识别记录');
+    const body = modal('验证码识别记录', 'settings');
     body.append(el('p', {}, '最多保留 50 条本地识别记录，仅含识别结果与字形长度，不保存账号或密码。'));
     const records = stored(CAPTCHA_KEY, []);
     for (const item of (Array.isArray(records) ? records : []).slice().reverse()) {
@@ -1428,8 +1490,8 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
     if (settings.remoteAuto && origin?.type !== 'none' && (origin?.luoguId || origin?.type === 'codeforces')) loadRemoteMeta(state);
   }
   function configureOrigin() {
-    const origin = remoteState?.origin || { type: 'luogu', target: '', extra_links: [] };
-    const body = modal('本地题源配置');
+    const origin = remoteState?.origin || inferOrigin() || { type: 'luogu', target: '', extra_links: [] };
+    const body = modal('本地题源配置', 'remote');
     body.append(el('p', {}, `只保存到本机。题目键：${problemKey()}。普通本地 P 题号不会被自动当成洛谷题号。`));
     const type = el('select', { id: 'exhloj-origin-type' });
     for (const [id, label] of [['luogu', '洛谷'], ['codeforces', 'Codeforces'], ['qoj', 'QOJ'], ['atcoder', 'AtCoder'], ['other', '其他链接'], ['none', '停用此题识别']]) type.append(el('option', { value: id }, label));
@@ -1469,7 +1531,7 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
   }
   function openLuoguTool(value) {
     const id = luoguId(value); if (!id) throw new Error('请输入正确的洛谷题号，例如 P1001 或 CF1234A');
-    const body = modal(`洛谷工具 · ${id}`), root = el('div'); body.append(root);
+    const body = modal(`洛谷工具 · ${id}`, 'remote'), root = el('div'); body.append(root);
     const state = makeRemoteState(normalizeOrigin({ type: 'luogu', target: id })); state.root = root; renderRemote(state);
     loadRemoteMeta(state);
   }
@@ -1681,7 +1743,7 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
   }
   function openContestHelper() {
     if (!settings.contestHelper) throw workError('请先启用 contest-helper');
-    const body = modal('比赛助手'), context = contestContext(), form = el('form', { id: 'exhloj-contest-form' });
+    const body = modal('比赛助手', 'contest'), context = contestContext(), form = el('form', { id: 'exhloj-contest-form' });
     for (const [name, title, value] of [['domain', '域 ID', context.domain], ['tid', '比赛 / 作业 ID', context.id]]) {
       const label = el('label', {}, title + ' '); label.append(el('input', { type: 'text', name, value, required: true })); form.append(label);
     }
@@ -1691,7 +1753,7 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
     }
     form.append(button('导出题面 ZIP', 'contest-statements'), button('导出提交 CSV', 'contest-records-csv'), button('导出提交 JSON', 'contest-records-json'), button('导出 Ghost', 'contest-ghost'));
     body.append(form); workProgress(body, 'contest');
-    body.append(el('h3', {}, '报名工具'), el('p', {}, '检查设置中配置的目标、标题和赛制；仅列出尚未结束且未报名的比赛 / 作业。自动报名默认关闭。'));
+    body.append(el('h3', {}, '报名工具'), button('自动报名设置', 'panel-attend'), el('p', {}, '检查配置范围内尚未结束、未报名的比赛与作业。'));
     body.append(button('检查待报名', 'attend-preview'), el('div', { id: 'exhloj-attend-results' }));
     workProgress(body, 'auto'); showWorkErrors(workStates.contest); showWorkErrors(workStates.auto);
   }
@@ -1892,7 +1954,7 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
   }
   function openJuanMonitor() {
     if (!settings.juanMonitor) throw workError('请先启用 juan-monitor');
-    const body = modal('卷王监视器'), form = el('form', { id: 'exhloj-juan-form' });
+    const body = modal('卷王监视器', 'juan'), form = el('form', { id: 'exhloj-juan-form' });
     body.append(el('p', {}, '同一用户在同一域通过同一道题只计一次。区间 AC 按可见提交时间去重；缺少时间的榜单成绩仅计入累计。'));
     const label = el('label', {}, '训练域 ID（每行一个）'), domains = el('textarea', { name: 'domains' }); domains.value = settings.juanDomains || domainId(); label.append(domains); form.append(label, button('读取可访问域', 'juan-domains'), el('div', { id: 'exhloj-juan-domains' }));
     for (const [name, text, checked] of [['records', '公开 AC 提交', settings.juanRecords], ['contests', '比赛榜单', settings.juanContests], ['homeworks', '作业榜单', settings.juanHomeworks]]) {
@@ -1968,15 +2030,6 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
     });
   }
   function juanResult() { const result = workStates.juan.result; if (!result) throw workError('请先完成一次统计'); return result; }
-  function installWorkMenu(menu) {
-    if (!menu) return;
-    for (const [enabled, action, title] of [[settings.contestHelper, 'contest-helper', '比赛助手'], [settings.juanMonitor, 'juan-open', '卷王监视器'], [settings.userModule, 'user-open', '用户工具']]) {
-      const existing = $(`[data-exh-work-menu="${action}"]`, menu);
-      if (!enabled) { existing?.remove(); continue; }
-      if (existing) continue;
-      const li = el('li', { class: 'menu__item', 'data-exh-work-menu': action }); li.append(el('a', { class: 'menu__link', href: '#exhloj-' + action, 'data-exh-action': action }, title)); menu.append(li);
-    }
-  }
   function contestToolbar() {
     if (!settings.contestHelper) { $('#exhloj-contest-tools')?.remove(); return; }
     if (!['contest_detail', 'homework_detail', 'contest_scoreboard', 'homework_scoreboard'].includes(pageName()) || $('#exhloj-contest-tools') || !mainColumn()) return;
@@ -2192,7 +2245,7 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
     try { if (page.UiContext?.exhloj) { if (settings.userModule) page.UiContext.exhloj.user = localUserAPI; else delete page.UiContext.exhloj.user; } } catch {}
     refreshUserProfile(); refreshUserScoreboards(); refreshUserNames(); ratingToolbar();
   }
-  function userToolBody(title) { if (!settings.userModule) throw workError('请先启用 user 模块'); return modal(title); }
+  function userToolBody(title) { if (!settings.userModule) throw workError('请先启用用户资料与 Rating'); return modal(title, 'user'); }
   function openUserTools() {
     const body = userToolBody('用户工具 · 本地'), store = userStore();
     body.append(el('p', {}, '资料、教练标记和 Rating 只在本机生效。所有用户均可编辑，没有特定 UID 的管理员限制。'));
@@ -3230,7 +3283,7 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
   function showPermissions() {
     const value = permissionValue();
     if (value === null) throw new Error('页面未提供完整的权限位');
-    const body = modal('用户权限');
+    const body = modal('用户权限', 'user');
     body.append(el('p', {}, `当前域：${domainId()}；角色：${current('udoc')?.role || '未知'}。权限位对应原版 Hydro 定义。`));
     const table = el('table'), head = el('tr'); head.append(el('th', {}, '权限'), el('th', {}, '状态')); table.append(head);
     for (const p of PERMISSIONS) {
@@ -3250,7 +3303,12 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
     busyActions.add(action);
     task(async () => {
       switch (action) {
-        case 'settings': openSettings(); break;
+        case 'settings': openHome(); break;
+        case 'panel-tab': openPanelSection(control.dataset.panelTab); break;
+        case 'panel-settings': openSettings(); break;
+        case 'panel-data': openDataTools(); break;
+        case 'panel-remote': openRemoteTools(); break;
+        case 'panel-attend': openSettings(true); break;
         case 'close': $('#exhloj-local-dialog')?.close(); break;
         case 'reload': location.reload(); break;
         case 'save-settings': {
@@ -3275,7 +3333,7 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
           if (!Object.keys(value).length) throw new Error('此脚本的存储中没有旧版缓存；请从旧脚本导出 JSON 后导入');
           save(CACHE_KEY, { ...validateCache(stored(CACHE_KEY, {})), ...value }); notify('已保留旧版缓存'); break;
         }
-        case 'view-cache': { const body = modal('本地缓存'); body.append(el('pre', {}, JSON.stringify(exportData(), null, 2))); break; }
+        case 'view-cache': { const body = modal('备份内容', 'data'); body.append(el('pre', {}, JSON.stringify(exportData(), null, 2))); break; }
         case 'problem-copy': await copyText(markdownContent((await problemDocument()).content)); break;
         case 'solution-copy': await copySolution(control); break;
         case 'cph': case 'editor': {
@@ -3450,7 +3508,7 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
   for (const event of ['pjax:end', 'vjContentNew', 'popstate', 'pageshow']) window.addEventListener(event, schedule);
   // Hydro 的部分版本通过 jQuery 触发 vjContentNew，原生监听器无法接收。
   try { (page.jQuery || page.$)?.(document).on('vjContentNew.exhlojLocal pjax:end.exhlojLocal', schedule); } catch {}
-  if (typeof GM_registerMenuCommand === 'function') GM_registerMenuCommand('Extend HLOJ 设置', openSettings);
+  if (typeof GM_registerMenuCommand === 'function') GM_registerMenuCommand('Extend HLOJ', openHome);
   refresh();
   // 为晚于 userscript 初始化的 UiContext 提供有界重试，不产生网络轮询。
   for (const delay of [300, 1000, 3000, 8000]) setTimeout(schedule, delay);

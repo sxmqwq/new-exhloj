@@ -71,6 +71,9 @@ async function check(name, work) {
   activeCheck = name;
   await work(); checks.push(name); console.log('PASS', name);
 }
+async function panelTab(page, tab) { await page.locator(`[data-panel-tab="${tab}"]`).click(); }
+async function openSettingsPage(page) { await page.locator('[data-exh-fallback]').click(); await panelTab(page, 'settings'); }
+async function openDataPage(page) { await page.locator('[data-exh-fallback]').click(); await panelTab(page, 'data'); }
 (async () => {
   browser = await chromium.launch({ ...(process.env.EXHLOJ_CHROME ? { executablePath: process.env.EXHLOJ_CHROME } : {}), headless: true, args: ['--no-sandbox'] });
   await check('core: guest fallback, lazy user menu, deduplication, no automatic writes/requests', async () => {
@@ -93,7 +96,7 @@ async function check(name, work) {
   });
   await check('core: save UI switch and preserve ports across reinstall/page load', async () => {
     const f = await fixture('homepage', '');
-    await f.page.locator('[data-exh-fallback]').click();
+    await openSettingsPage(f.page);
     await f.page.locator('[name="ui"]').uncheck();
     await f.page.locator('[name="cphPort"]').fill('12345');
     await f.page.locator('[data-exh-action="save-settings"]').click();
@@ -103,9 +106,41 @@ async function check(name, work) {
     assert.equal(await g.page.locator('html.exhloj-local-rounded').count(), 0);
     assert.equal(await g.page.locator('[data-exh-fallback]').count(), 1); await g.done();
   });
+  await check('panel: a single menu entry replaces old tool links and preserves native account actions', async () => {
+    const f = await fixture('homepage', '<ol id="menu-nav-user"><li><a href="/home/domain">我的域</a></li><li><a href="/file">我的文件</a></li><li><a href="/user/logout">登出</a></li><li data-exh-work-menu="contest-helper">比赛助手</li><li data-exh-work-menu="juan-open">卷王监视器</li><li data-exh-work-menu="user-open">用户工具</li></ol>');
+    assert.equal(await f.page.locator('[data-exh-work-menu]').count(), 0); assert.equal(await f.page.locator('.exhloj-local-menu').count(), 1);
+    assert.equal(await f.page.locator('#menu-nav-user a[href="/user/logout"]').count(), 1);
+    await f.page.locator('.exhloj-local-menu a').click(); assert.equal(await f.page.locator('#exhloj-local-dialog').getAttribute('data-panel-section'), 'home');
+    assert.equal(await f.page.locator('.exhloj-panel-card').count(), 6); assert.equal(await f.page.locator('.exhloj-panel-nav button').count(), 7);
+    assert.deepEqual(await f.page.evaluate(() => window.__commands.map(x => x.name)), ['Extend HLOJ']);
+    assert.equal(f.requests.length, 1); assert.deepEqual(await f.page.evaluate(() => window.__gm), []); await f.done();
+  });
+  await check('panel: all tools and automatic attendance settings share the same navigable dialog', async () => {
+    const f = await fixture('homepage', ''); await f.page.locator('[data-exh-fallback]').click();
+    await f.page.locator('[data-exh-action="contest-helper"]').click(); assert.equal(await f.page.locator('#exhloj-contest-form').count(), 1);
+    await f.page.locator('[data-exh-action="panel-attend"]').click(); assert.equal(await f.page.locator('#exhloj-attend-options').evaluate(node => node.open), true);
+    assert.equal(await f.page.locator('[name="autoAttendTargets"]').isVisible(), true);
+    for (const [tab, selector] of [['juan', '#exhloj-juan-form'], ['user', '#exhloj-user-options'], ['remote', '#exhloj-luogu-id'], ['settings', '#exhloj-local-settings'], ['data', '#exhloj-local-import'], ['home', '.exhloj-panel-grid']]) {
+      await panelTab(f.page, tab); assert.equal(await f.page.locator(selector).count(), 1); assert.equal(await f.page.locator('dialog').count(), 1);
+      assert.equal(await f.page.locator('.exhloj-panel-nav [aria-current="page"]').getAttribute('data-panel-tab'), tab);
+    }
+    assert.equal(f.requests.length, 1); assert.deepEqual(await f.page.evaluate(() => window.__gm), []); assert.deepEqual(await f.page.evaluate(() => window.__store), {}); await f.done();
+  });
+  await check('panel: disabled tools can be enabled in settings and the dashboard fits desktop and mobile', async () => {
+    const f = await fixture('homepage', '', {}, { storage: { 'exhloj.coreui.settings.v1': { contestHelper: false } } });
+    await f.page.locator('[data-exh-fallback]').click(); assert.equal(await f.page.locator('.exhloj-panel-card[data-exh-action="contest-helper"]').isDisabled(), true);
+    await panelTab(f.page, 'contest'); await f.page.locator('[data-exh-action="panel-settings"]').click(); await f.page.locator('[name="contestHelper"]').check(); await f.page.locator('[data-exh-action="save-settings"]').click();
+    await panelTab(f.page, 'contest'); assert.equal(await f.page.locator('#exhloj-contest-form').count(), 1); await panelTab(f.page, 'home');
+    for (const [width, height, name] of [[1280, 900, 'desktop'], [400, 800, 'mobile']]) {
+      await f.page.setViewportSize({ width, height }); const box = await f.page.locator('#exhloj-local-dialog').boundingBox(); assert.ok(box.x >= 0 && box.x + box.width <= width && box.y >= 0 && box.y + box.height <= height);
+      assert.equal(await f.page.locator('.exhloj-dialog-body').evaluate(node => node.scrollWidth <= node.clientWidth + 1), true);
+      await f.page.locator('#exhloj-local-dialog').screenshot({ path: `tests/output/panel-${name}.png` });
+    }
+    assert.equal(f.requests.length, 1); await f.done();
+  });
   await check('core: JSON round trip, invalid imports atomic, sensitive legacy keys excluded, safe cache rendering', async () => {
     const f = await fixture('homepage', ''); const { page } = f;
-    await page.locator('[data-exh-fallback]').click();
+    await openDataPage(page);
     const data = { format: 'exhloj-core-ui', schemaVersion: 1, settings: { ui: true }, cache: {
       'exhloj.user': { title: '<img src=x onerror="window.injected=1">' }, 'exhloj.token': 'secret', 'exhloj.passwords': [{ password: 'secret' }] } };
     await page.locator('#exhloj-local-import').fill(JSON.stringify(data));
@@ -121,10 +156,10 @@ async function check(name, work) {
     const result = JSON.parse(text); assert.deepEqual(Object.keys(result.cache), ['exhloj.user']);
     assert.equal(result.settings.ui, true); await f.done();
   });
-  await check('core: downloadable backup is valid UTF-8 JSON; settings dialog fits desktop and mobile', async () => {
+  await check('core: downloadable backup is valid UTF-8 JSON; unified panel fits desktop and mobile', async () => {
     const f = await fixture('homepage', ''); const { page } = f;
     await page.setViewportSize({ width: 1280, height: 900 });
-    await page.locator('[data-exh-fallback]').click();
+    await openDataPage(page);
     await page.screenshot({ path: 'tests/output/settings-desktop.png' });
     const waiting = page.waitForEvent('download');
     await page.locator('[data-exh-action="export"]').click();
@@ -598,9 +633,9 @@ async function check(name, work) {
     assert.match(script, /\/\/ @name\s+Extend HLOJ\n/); assert.equal(script.match(/^\/\/ @version\s+(\S+)/m)?.[1], require('../package.json').version);
     const f = await fixture('contest_detail', '<ol id="menu-nav-user"></ol>', { tdoc }, { path: `/d/test/contest/${tid}`, storage: fast() });
     await f.page.waitForTimeout(500);
-    assert.equal(f.requests.length, 1); assert.equal(await f.page.locator('[data-exh-work-menu]').count(), 3);
+    assert.equal(f.requests.length, 1); assert.equal(await f.page.locator('[data-exh-work-menu]').count(), 0);
     assert.equal(await f.page.locator('#exhloj-contest-tools').count(), 1);
-    await f.page.addScriptTag({ content: script }); assert.equal(await f.page.locator('[data-exh-work-menu]').count(), 3);
+    await f.page.addScriptTag({ content: script }); assert.equal(await f.page.locator('[data-exh-work-menu]').count(), 0);
     await f.done();
     const g = await fixture('contest_detail', '<ol id="menu-nav-user"></ol>', { tdoc }, { storage: fast({ contestHelper: false, juanMonitor: false, userModule: false }) });
     assert.equal(await g.page.locator('[data-exh-work-menu]').count(), 0); assert.equal(await g.page.locator('#exhloj-contest-tools').count(), 0); await g.done();
@@ -704,7 +739,7 @@ async function check(name, work) {
     const f = await fixture('homepage', '', {}, { storage: fast(), strictApi: true, api: { 'GET /home/domain': { body: { ddocs: [{ _id: 'test', name: 'Test' }, { _id: 'extra', name: 'Extra' }] } }, 'GET /d/extra/record': { body: { rdocs: [] } } } });
     await openWork(f, 'juan-open'); await f.page.locator('[data-exh-action="juan-domains"]').click(); await f.page.locator('[data-juan-domain="test"]').uncheck(); await f.page.locator('[data-juan-domain="extra"]').check();
     assert.equal(await f.page.locator('[name="domains"]').inputValue(), 'extra'); await f.page.locator('[name="contests"]').uncheck(); await f.page.locator('[name="homeworks"]').uncheck();
-    await f.page.locator('[data-exh-action="juan-start"]').click(); await finished(f, 'juan'); await f.page.locator('[data-exh-action="close"]').click(); await f.page.locator('[data-exh-fallback]').click(); await f.page.locator('[data-exh-action="save-settings"]').click();
+    await f.page.locator('[data-exh-action="juan-start"]').click(); await finished(f, 'juan'); await f.page.locator('[data-exh-action="close"]').click(); await openSettingsPage(f.page); await f.page.locator('[data-exh-action="save-settings"]').click();
     const settings = await f.page.evaluate(() => JSON.parse(window.__store['exhloj.coreui.settings.v1'])); assert.equal(settings.juanDomains, 'extra'); assert.equal(settings.juanContests, false); assert.equal(settings.juanHomeworks, false); await f.done();
   });
   await check('work: repeated pages and request budgets stop scanning, retaining partial evidence', async () => {
@@ -801,7 +836,7 @@ async function check(name, work) {
     await f.page.locator('[name="display"]').selectOption('no-change'); await f.page.locator('[name="ccf"]').check(); await f.page.locator('[data-exh-action="user-options-save"]').click(); assert.equal(await f.page.locator('#named .exhloj-user-ccf').count(), 1);
     await f.page.evaluate(() => document.body.insertAdjacentHTML('beforeend', '<div class="col--submit-by"><a id="late-user" href="/user/7">seven</a></div>')); await f.page.waitForSelector('#late-user .exhloj-user-ccf');
     await f.page.evaluate(() => document.querySelector('#late-user').textContent = 'changed'); await f.page.waitForTimeout(300); assert.equal(await f.page.locator('#late-user .exhloj-user-ccf').count(), 1);
-    await f.page.locator('[data-exh-action="close"]').click(); await f.page.locator('[data-exh-fallback]').click(); await f.page.locator('[name="userModule"]').uncheck(); await f.page.locator('[data-exh-action="save-settings"]').click();
+    await f.page.locator('[data-exh-action="close"]').click(); await openSettingsPage(f.page); await f.page.locator('[name="userModule"]').uncheck(); await f.page.locator('[data-exh-action="save-settings"]').click();
     assert.equal(await f.page.locator('#named').innerHTML(), '<em>旧姓名</em> (old)'); assert.equal(await f.page.locator('.exhloj-user-ccf').count(), 0); assert.equal(await f.page.locator('#named.exhloj-user-name').count(), 0); await f.done();
   });
   await check('user: Hydro level badges and avatar links never become a second username', async () => {
@@ -827,7 +862,7 @@ async function check(name, work) {
     await f.page.waitForTimeout(300);
     assert.equal(await f.page.locator('#site-level').textContent(), 'LV 7');
     assert.equal(await f.page.locator('.exhloj-user-ccf').count(), 1);
-    await f.page.locator('[data-exh-fallback]').click(); await f.page.locator('[name="userModule"]').uncheck(); await f.page.locator('[data-exh-action="save-settings"]').click();
+    await openSettingsPage(f.page); await f.page.locator('[name="userModule"]').uncheck(); await f.page.locator('[data-exh-action="save-settings"]').click();
     assert.equal(await f.page.locator('#hydro-name').textContent(), '陈思宁');
     assert.equal(await f.page.locator('#site-level').textContent(), 'LV 7');
     assert.equal(await f.page.locator('.exhloj-user-ccf').count(), 0);
@@ -901,7 +936,7 @@ async function check(name, work) {
     const f = await fixture('homepage', '', {}, { storage: userStorage(), strictApi: true, api: { 'GET /user/7': { body: { udoc: { _id: 7, uname: 'server-name', displayName: 'server-display' } } } } }); await openEditor(f, 7);
     await f.page.locator('[data-exh-action="user-fetch-name"]').click(); await f.page.waitForFunction(() => document.querySelector('[name="uname"]').value === 'server-name');
     assert.equal(await f.page.evaluate(() => window.__store['exhloj.coreui.cache.v1']['exhloj.user'].oiers[7].uname), 'seven'); await f.page.locator('[data-exh-action="user-save"]').click();
-    await f.page.locator('[data-exh-action="close"]').click(); await f.page.locator('[data-exh-fallback]').click(); const backup = JSON.parse((await downloaded(f, 'export')).toString()); assert.equal(backup.cache['exhloj.user'].oiers[7].uname, 'server-name'); assert.equal(backup.cache['exhloj.ratedcontests'].records.length, 5); assert.equal(backup.settings.userModule, true); assert.ok(f.requests.every(r => r.method === 'GET')); await f.done();
+    await f.page.locator('[data-exh-action="close"]').click(); await openDataPage(f.page); const backup = JSON.parse((await downloaded(f, 'export')).toString()); assert.equal(backup.cache['exhloj.user'].oiers[7].uname, 'server-name'); assert.equal(backup.cache['exhloj.ratedcontests'].records.length, 5); assert.equal(backup.settings.userModule, true); assert.ok(f.requests.every(r => r.method === 'GET')); await f.done();
   });
   await check('user: complete monitor results can explicitly update local practice points', async () => {
     const f = await fixture('homepage', '', {}, { storage: userStorage({ juanContests: false, juanHomeworks: false }), strictApi: true, api: { 'GET /d/test/record': { body: { rdocs: [{ _id: oid(0.1), uid: 7, pid: 1, status: 1 }, { _id: oid(0.1, 2), uid: 7, pid: 2, status: 1 }], pageCount: 1 } } } });
@@ -912,7 +947,7 @@ async function check(name, work) {
     const contests = Array.from({ length: 22 }, (_, i) => [`local/${i + 1}`, `Round ${i + 1}`, 1]), records = [[7, 0, 1, 1900, 2000], [7, 1, 1, 1950, 2000], [7, 2, 1, 1920, 1800], [8, 0, 1, 2000, 2000]];
     const users = { oiers: { 7: { name: '<img src=x onerror="window.injected=1">', records: [{ contest: '<script>evil()</script>', awards: '金牌', score: 100 }] } }, teachers: [], practice: {} };
     const f = await fixture('user_detail', '<a id="escaped-user" class="user-profile-name" href="/user/7">seven</a>', { udoc: { _id: 7, uname: 'seven' } }, { storage: userStorage({}, {}, {}), path: '/user/7' });
-    await f.page.locator('[data-exh-fallback]').click(); await f.page.locator('#exhloj-local-import').fill(JSON.stringify({ 'exhloj.user': users, 'exhloj.ratedcontests': { contests, records }, 'model.user.display-name': 'display-realname-color', 'model.user.display-ccflevel': true })); await f.page.locator('[data-exh-action="import"]').click();
+    await openDataPage(f.page); await f.page.locator('#exhloj-local-import').fill(JSON.stringify({ 'exhloj.user': users, 'exhloj.ratedcontests': { contests, records }, 'model.user.display-name': 'display-realname-color', 'model.user.display-ccflevel': true })); await f.page.locator('[data-exh-action="import"]').click();
     await f.page.waitForFunction(() => document.querySelector('#escaped-user').textContent.includes('<img')); assert.equal(await f.page.locator('#escaped-user img').count(), 0); assert.equal(await f.page.locator('#exhloj-local-user-card script').count(), 0); assert.equal(await f.page.evaluate(() => window.injected), undefined);
     const metrics = await f.page.evaluate(() => window.UiContext.exhloj.user.ranking('down')); assert.deepEqual(metrics.map(row => [row.uid, row.down]), [[7, 30]]); const saved = await f.page.evaluate(() => JSON.parse(window.__store['exhloj.coreui.settings.v1'])); assert.equal(saved.userDisplay, 'display-realname-color'); assert.equal(saved.userCCF, true); await f.done();
   });
@@ -987,7 +1022,7 @@ async function check(name, work) {
     assert.equal(await f.page.locator('#exhloj-rating-tools').count(), 1);
     await f.page.evaluate(() => { history.pushState({}, '', '/d/test/contest'); document.documentElement.dataset.page = 'contest_main'; window.dispatchEvent(new Event('pjax:end')); });
     await f.page.waitForTimeout(250); assert.equal(await f.page.locator('[data-exh-action="user-rate-current"]').count(), 0); assert.equal(await f.page.locator('#exhloj-rating-tools [data-exh-action="user-timeline"]').count(), 1);
-    await f.page.locator('[data-exh-fallback]').click(); await f.page.locator('[name="userModule"]').uncheck(); await f.page.locator('[data-exh-action="save-settings"]').click(); assert.equal(await f.page.locator('#exhloj-rating-tools').count(), 0); await f.done();
+    await openSettingsPage(f.page); await f.page.locator('[name="userModule"]').uncheck(); await f.page.locator('[data-exh-action="save-settings"]').click(); assert.equal(await f.page.locator('#exhloj-rating-tools').count(), 0); await f.done();
   });
   await check('rating: timeline scans paginated finished contests, uses local date boundaries and resets in time order', async () => {
     const docs = [timelineDoc(3, '02', { beginAt: '2020-01-02T15:59:00Z', endAt: '2020-01-02T16:59:00Z' }), timelineDoc(1, '01', { beginAt: '2019-12-31T16:00:00Z' }), timelineDoc(2, '01'),
@@ -1230,7 +1265,7 @@ async function check(name, work) {
     const remote = oierRemotes(); for (const value of Object.values(remote)) value.delay = 500;
     const f = await fixture('homepage', '', {}, { storage: userStorage(), remote }); await openEditor(f, 7); const before = await savedOIer(f);
     await f.page.locator('[data-exh-action="user-oier-import"]').click(); await f.page.waitForFunction(() => window.__gm.length === 1);
-    await f.page.locator('[data-exh-action="close"]').click(); await f.page.locator('[data-exh-fallback]').click(); await f.page.locator('[name="userModule"]').uncheck(); await f.page.locator('[data-exh-action="save-settings"]').click();
+    await f.page.locator('[data-exh-action="close"]').click(); await openSettingsPage(f.page); await f.page.locator('[name="userModule"]').uncheck(); await f.page.locator('[data-exh-action="save-settings"]').click();
     await f.page.waitForTimeout(600); assert.deepEqual(await savedOIer(f), before); assert.equal((await gmRequests(f)).length, 1); await f.done();
   });
   await check('oier: zero-based contest and school IDs, missing scores, grade overrides and empty records match the database', async () => {

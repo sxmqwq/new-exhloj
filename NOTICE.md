@@ -1,6 +1,6 @@
 # 来源说明
 
-本项目按用户提供的 Extend HLOJ 1.16.1 的功能进行本地重制。原版作者署名 **Extend HLOJ Dev Team** 保留在脚本头部。
+本项目延续 Extend HLOJ 1.16.1 的功能设计，原版作者署名 **Extend HLOJ Dev Team** 保留在脚本头部。
 
 恢复范围为 core、ui、captcha、remote-problem、contest-helper、juan-monitor、user。代码不包含旧插件共享后端的服务实现，不使用其密码/token 通道。
 

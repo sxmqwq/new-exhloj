@@ -2,6 +2,7 @@
 """Build the userscript and package an installation ZIP using Python's standard library."""
 import hashlib
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -33,12 +34,17 @@ if not entries["INSTALL.txt"].startswith(f"Extend HLOJ {version}\n".encode()):
     raise SystemExit("INSTALL.zh-CN.txt and package.json versions differ.")
 if not check_only:
     output.parent.mkdir(exist_ok=True)
+    for previous in output.parent.glob('exhloj-*.zip'):
+        if previous != output and re.fullmatch(r'exhloj-\d+\.\d+\.\d+\.zip', previous.name):
+            previous.unlink()
     with ZipFile(output, "w", ZIP_DEFLATED, compresslevel=9) as archive:
         for name, content in entries.items():
             info = ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
             info.compress_type = ZIP_DEFLATED
             info.external_attr = 0o100644 << 16
             archive.writestr(info, content, compresslevel=9)
+if any(previous != output for previous in output.parent.glob('exhloj-*.zip')):
+    raise SystemExit('Obsolete installation ZIPs remain in release/; run npm run package.')
 with ZipFile(output) as archive:
     if archive.testzip() is not None or sorted(archive.namelist()) != sorted(entries):
         raise SystemExit("Installation ZIP is corrupt or contains unexpected files; run npm run package.")

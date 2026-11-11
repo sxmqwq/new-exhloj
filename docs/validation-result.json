@@ -1,13 +1,16 @@
 {
-  "version": "2.6.1",
-  "scriptSha256": "ea9ea87cfad7741f16265b1e12185bf39cb981e39211a728e9f361231be27116",
+  "version": "2.7.0",
+  "scriptSha256": "8cabe680fe33d49bdd52931730fe4d300b020ac11cf335154353f5599e0e6e47",
   "browser": "153.0.8010.0",
-  "passed": 108,
+  "passed": 111,
   "checks": [
     "core: guest fallback, lazy user menu, deduplication, no automatic writes/requests",
     "core: save UI switch and preserve ports across reinstall/page load",
+    "panel: a single menu entry replaces old tool links and preserves native account actions",
+    "panel: all tools and automatic attendance settings share the same navigable dialog",
+    "panel: disabled tools can be enabled in settings and the dashboard fits desktop and mobile",
     "core: JSON round trip, invalid imports atomic, sensitive legacy keys excluded, safe cache rendering",
-    "core: downloadable backup is valid UTF-8 JSON; settings dialog fits desktop and mobile",
+    "core: downloadable backup is valid UTF-8 JSON; unified panel fits desktop and mobile",
     "ui: exact multilingual Markdown and CPH payload, sends only to chosen local endpoint",
     "ui: delayed context and JSON fallback for problem copying",
     "ui: homework title/files, filename encoding and no duplicate tables",
@@ -113,26 +116,26 @@
     "oier: quick full pinyin supports polyphonic characters without relying on one initials spelling",
     "oier: quick small candidate choice and expansion survive pagination and fit the dialog"
   ],
-  "checkedAt": "2026-11-09",
+  "checkedAt": "2026-11-11",
   "node": "v24.22.1",
   "packaging": {
-    "version": "2.6.1",
-    "passed": 3,
+    "version": "2.7.0",
+    "passed": 5,
     "failures": []
   },
   "session": {
-    "version": "2.6.1",
-    "scriptSha256": "ea9ea87cfad7741f16265b1e12185bf39cb981e39211a728e9f361231be27116",
+    "version": "2.7.0",
+    "scriptSha256": "8cabe680fe33d49bdd52931730fe4d300b020ac11cf335154353f5599e0e6e47",
     "browser": "153.0.8010.0",
     "fixture": "local HTTP server; real HttpOnly cookies; no live OJ account",
     "passed": 0,
     "checks": [],
     "failure": {
       "check": "session: full navigation and plugin controls preserve the HttpOnly session",
-      "message": "page.goto: net::ERR_EMPTY_RESPONSE at http://oj.hailiangedu.com:37087/user/login\nCall log:\n\u001b[2m  - navigating to \"http://oj.hailiangedu.com:37087/user/login\", waiting until \"load\"\u001b[22m\n"
+      "message": "page.goto: net::ERR_EMPTY_RESPONSE at http://oj.hailiangedu.com:35469/user/login\nCall log:\n\u001b[2m  - navigating to \"http://oj.hailiangedu.com:35469/user/login\", waiting until \"load\"\u001b[22m\n"
     }
   },
-  "totalPassedLocally": 111,
+  "totalPassedLocally": 116,
   "liveSiteLoginVerified": false,
   "limitations": [
     "Local HTTP session fixtures returned net::ERR_EMPTY_RESPONSE in this runtime; they must pass in GitHub Actions before merge.",

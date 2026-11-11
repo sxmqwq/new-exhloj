@@ -1,6 +1,8 @@
 """Exercise source package completeness, reproducibility and stale-file detection."""
 import importlib.util
 import json
+import subprocess
+import sys
 from pathlib import Path
 import tempfile
 import unittest
@@ -10,6 +12,9 @@ ROOT = Path(__file__).resolve().parent.parent
 spec = importlib.util.spec_from_file_location('package_source', ROOT / 'scripts/package-source.py')
 package = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(package)
+notes_spec = importlib.util.spec_from_file_location('release_notes', ROOT / 'scripts/release-notes.py')
+notes = importlib.util.module_from_spec(notes_spec)
+notes_spec.loader.exec_module(notes)
 
 
 class SourcePackageTests(unittest.TestCase):
@@ -48,6 +53,28 @@ class SourcePackageTests(unittest.TestCase):
         (self.root / '.github/workflows/test.yml').unlink()
         with self.assertRaisesRegex(ValueError, 'Missing required'):
             package.stage(self.root)
+
+    def test_release_directory_keeps_only_the_current_installation(self):
+        obsolete = self.root / 'release/exhloj-0.0.0.zip'
+        obsolete.write_bytes(b'old installation')
+        command = [sys.executable, 'scripts/package-release.py']
+        checked = subprocess.run([*command, '--check'], cwd=self.root, capture_output=True, text=True)
+        self.assertNotEqual(checked.returncode, 0)
+        self.assertIn('Obsolete installation ZIPs', checked.stderr)
+        built = subprocess.run(command, cwd=self.root, capture_output=True, text=True)
+        self.assertEqual(built.returncode, 0, built.stderr)
+        self.assertFalse(obsolete.exists())
+        self.assertEqual([p.name for p in (self.root / 'release').glob('*.zip')], [f'exhloj-{self.version}.zip'])
+
+    def test_release_notes_describe_the_current_installation(self):
+        text = notes.release_notes(self.root, 'sxmqwq/new-exhloj')
+        self.assertIn(f'/releases/download/v{self.version}/exhloj.user.js', text)
+        self.assertIn('Tampermonkey', text)
+        self.assertIn(f'exhloj-{self.version}-install.zip', text)
+        self.assertNotIn('发布到 GitHub', text)
+        (self.root / 'CHANGELOG.md').write_text('# No current changes\n')
+        with self.assertRaisesRegex(ValueError, 'Missing changelog'):
+            notes.release_notes(self.root, 'sxmqwq/new-exhloj')
 
     def test_stale_source_and_staged_installation_are_rejected(self):
         package.stage(self.root)
