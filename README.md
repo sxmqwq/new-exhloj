@@ -1,145 +1,56 @@
 # Extend HLOJ
 
-Extend HLOJ 的本地重制版，当前版本 **2.6.1**。安装在 Tampermonkey 中，增强 HLOJ / 部分 Hydro 页面的训练体验。
+为 HLOJ / Hydro 提供题源与难度、比赛工具、练习统计、个人资料和 Rating 的浏览器脚本。当前版本 **2.7.0**。
 
-本版保留原脚本的作者信息，恢复了以下七个模块，不依赖原插件的共享后端。
+**[安装 / 更新脚本](https://raw.githubusercontent.com/sxmqwq/new-exhloj/main/dist/exhloj.user.js)** · **[下载与更新说明](https://github.com/sxmqwq/new-exhloj/releases/latest)** · [使用指南](docs/INSTALL.zh-CN.txt)
 
-| 模块 | 功能 |
+![Extend HLOJ 控制面板](docs/images/panel.png)
+
+## 开始使用
+
+1. 安装 [Tampermonkey](https://www.tampermonkey.net/)。
+2. 点击上方的 **安装 / 更新脚本**，按浏览器提示完成安装。
+3. 刷新 OJ，在用户名菜单中点击 **Extend HLOJ**。没有用户名菜单的页面会显示右下角入口。
+
+所有工具集中在同一个面板中。升级现有脚本会沿用设置和本地资料，也可以在 **数据** 页面导出备份。
+
+## 可以做什么
+
+| 面板 | 功能 |
 | --- | --- |
-| `core` | 设置、模块开关、缓存与 JSON 备份、事件接口 |
-| `ui` | 界面调整、作业附件、榜单标记、Markdown 复制、头像链接、权限查看、CPH / CP Editor |
-| `captcha` | 本地 SVG 验证码识别、折叠与展开、可选识别记录 |
-| `remote-problem` | 题源链接、QOJ 题名识别、难度、翻译、题解、本地导出、原站公开提交查看 |
-| `contest-helper` | 题面和附件 ZIP、提交 CSV/JSON、Ghost、手动或可选自动报名 |
-| `juan-monitor` | 公开提交与比赛/作业榜单汇总、按域和题目去重、本地快照增量 |
-| `user` | 本地资料、姓名颜色、CCF 标记、获奖信息、Rating 历史/排行/结算、OIerDb 链接导入、排名页快捷导入与刷新 |
+| 比赛 | 导出题面与附件、提交记录和 Ghost；检查报名、配置自动报名 |
+| 卷王 | 汇总公开练习成绩，查看近期进度与快照变化 |
+| 用户 | 管理本地资料、OIerDb 绑定、姓名显示和比赛 Rating |
+| 题源 | 查看原题链接、洛谷难度、翻译与题解，配置当前题源 |
+| 设置 | 界面增强、验证码识别、编辑器连接和模块开关 |
+| 数据 | 备份与恢复设置、题源配置、用户资料和 Rating |
 
-## 安装与升级
+题目名称中的 `[QOJ18209]` 等标记可以自动识别为 QOJ 题源；洛谷难度按新版体系显示，包含青色“提高”。题目页的复制、CPH / CP Editor 和题源快捷按钮继续保留。
 
-1. 安装 Tampermonkey。
-2. 打开仓库中的 [`dist/exhloj.user.js`](dist/exhloj.user.js)，点击 **Raw**，再由 Tampermonkey 安装；也可以把全文粘贴到油猴编辑器中保存。
-3. 升级已有版本时，推荐直接在原脚本的编辑器中替换全文，以保留设置和缓存。作为新脚本安装时，先停用旧脚本，再按需导入旧版 JSON 备份。
-4. 刷新 OJ，在用户菜单或右下角 **Extend HLOJ** 按钮打开设置。
+## 常用操作
 
-现成的安装包位于 [`release/exhloj-2.6.1.zip`](release/exhloj-2.6.1.zip)，其中包含脚本、安装说明、版本信息和第三方许可证。`release/exhloj-2.4.0.zip` 等旧包仅供历史版本使用。
+**自动报名**：面板 → 比赛 → 自动报名设置。填写目标（例如 `pnoi/contest`），按需设置标题筛选，启用后保存。运行时保持 OJ 登录并开着一个 OJ 页面。
 
-| 需要做什么 | 下载内容 |
-| --- | --- |
-| 安装或升级油猴脚本 | `dist/exhloj.user.js`，或当前版本的 `*-install.zip` |
-| 修改源码或重新上传整个仓库 | `*-source.zip`，解压后文件位于包根目录，包含 `.github`、源码、构建器、测试和当前安装包 |
-| 排查检查失败 | Actions 中的 `exhloj-test-results`，包含测试报告与截图 |
+**OIerDb 导入**：面板 → 用户 → 编辑资料，粘贴选手主页链接。快捷导入可以从域排名页生成候选，由你确认后保存；已绑定资料可单人或批量刷新。
 
-Actions 将当前版本的安装文件与源码分别上传为 `exhloj-<版本>-install` 和 `exhloj-<版本>-source`；GitHub 下载的 artifact ZIP 是外层容器，解开后再使用其中对应的 ZIP。源码包不包含 `node_modules`、测试输出、Git 凭据或历史安装包。`SHA256SUMS` 覆盖当前版本的全部发布文件。
+**比赛 Rating**：在比赛详情或榜单页点击 **加入 Rating 并结算**。普通结算接着已保存的分数计算，重复比赛自动跳过。**时间轴结算**可选择日期和比赛，从 1800 重新计算所选历史。[计算规则](docs/RATING.zh-CN.md)
 
-完整使用说明见 [`docs/INSTALL.zh-CN.txt`](docs/INSTALL.zh-CN.txt)。本仓库没有预设 GitHub 用户名，也没有自动更新地址；发布到自己的仓库后，可按需要自行配置。
+用户资料、Rating 和设置保存在当前浏览器。读取榜单、原题和题解时使用当前账号可访问的数据。
 
-## 题源自动识别
+## 下载
 
-题目名称中的 `[QOJ18209]`、`QOJ18209` 等标记可自动作为默认题源，打开题目即显示对应的 QOJ 原题链接。支持大小写、空格、可选 `#` 和全角字符；手动配置、停用识别和已有明确题源优先。多个不同 QOJ 编号不自动选择，比赛页仍按原有题源显示设置处理，识别本身不请求 QOJ 或写入手动配置。
-
-读取洛谷题目时使用[新版难度体系](https://help.luogu.com.cn/manual/luogu/problem/difficulty)，包括青色“提高”。例如 P10873 读取的编号 7 显示紫色，编号 8 显示黑色。更新后会按需重新读取旧缓存；原有手动难度保留颜色，可在 **配置题源 → 难度** 选择“跟随原站”。
-
-## 用户资料与 OIerDb
-
-用户菜单 → **用户工具** → **编辑资料**。所有本地编辑入口均无特定 UID 的管理员限制；资料只影响本机显示，不改变站点账号、角色或认证。
-
-比赛详情 / 榜单页点击 **加入 Rating 并结算**，自动添加当前比赛命令并结算待处理比赛。普通结算沿用已保存分数，只追加新比赛，重复点击会跳过已有比赛。
-
-**时间轴结算**：选择域和起止日期，读取已结束的比赛，勾选后按开始时间从 1800 重算；全部成功才替换当前全部 Rating 历史。比赛页、比赛列表和用户工具均有入口。具体操作、命令及公式见 [`docs/RATING.zh-CN.md`](docs/RATING.zh-CN.md)。
-
-单人编辑器只接受完整的选手页面链接，例如 `https://oier.baoshuo.dev/oier/12345`。粘贴链接后自动从 OIerDb 官方数据读取姓名、CCF 等级、毕业年份、排名/积分和获奖记录；核对后点击 **保存本地资料**。选手 ID 从链接记录，排名页、网页正文和 Markdown 不再作为导入输入。
-
-编辑器、个人资料卡和已绑定名单均提供 **刷新**，用户工具中可 **刷新全部 OIerDb 资料**。刷新会更新并保存 OIerDb 字段，保留 OJ 用户名、教练标记、题目分和 Rating。名单显示每人的 OIerDb ID 与最后更新时间；未绑定、ID 已变化或读取失败的资料会保留并显示原因。
-
-读取期间新保存的资料会保留，冲突项跳过并显示原因；在编辑框中继续输入时，返回结果不会覆盖这些新输入。用户资料或 Rating 格式异常时，两部分独立显示，普通保存停止；JSON 编辑和用户导出会保留异常原文，明确修复相应部分后可继续使用。
-
-首次读取需下载官方数据，后续在当前页面按数据库版本复用；每次刷新都会重新检查官方版本。有进度显示和取消按钮。首次访问时按油猴提示允许 `oier.api.baoshuo.dev`。读取链接时只填入表单，保存后才建立本地绑定；刷新已绑定资料会直接保存。
-
-### 从排名页快捷导入
-
-用户工具 → **OIerDb 快捷导入** → 填写域 ID → **扫描排名页并识别**。用于已同意关联资料的成员；只扫描该域排名页可见用户，不枚举站点其他账号。已绑定 OIerDb ID 的用户自动跳过。
-
-- 提取用户名中的全部汉字，优先按完整姓名精确查找。
-- 识别全拼、大小写及带声调拼音，并核对姓名的完整读音；用内嵌的离线拼音字典建立本地全拼索引，无需另行下载字典。支持常见多音字、数字前后缀及连续字母子串，例如 `zhanghaoxuan2024`、`DL24zhangyixin`。完整姓名全拼优先，也保留独立首字母片段的查询。
-- 命中 **1～3 人**时进入折叠候选组，展开后由用户选择；2～3 人时默认不选中任何候选。超过 3 人不入队，未入队列表仍显示提取出的片段及原因。
-- 队列展示 OJ 用户、提取片段、查询方式及可展开的 OIerDb 资料，包括 ID、学校、年级和获奖摘要。默认不勾选导入；选定候选后可逐人确认、批量确认或移除。候选分页展示，跨页保留选择和展开状态。批量确认会跳过尚未选择具体人的多候选组，不自动挑第一人。
-
-扫描和识别只生成预览，确认时才写入本地资料；保留教练、题目分、Rating 及其他用户数据。确认时如果某人的本地资料已经改变，该项会跳过并显示原因。候选只保留在当前页面内存中，切换页面或账号后需重新扫描。
-
-整轮识别只检查一次版本，基础资料与获奖记录各下载一次，之后均在本地搜索。同版本在当前页面继续复用；不会逐个用户名请求 OIerDb。分页不完整、权限错误或取消任务时不发布候选，也不改动原资料。
-
-## 请求和数据
-
-- 设置、用户资料、Rating 和扫描快照保存在当前浏览器的油猴存储。
-- 用户资料编辑和 Rating 结算只写入本地；读取榜单、用户名时仍受站点权限限制。
-- 验证码识别在本机完成，不提交登录；OIerDb 仅按手动入口读取官方公开数据，不携带登录 Cookie，不上传资料。
-- 自动报名默认关闭。启用后仅处理明确配置的目标。
-- 附件链接、头像保存、报名、发送 CPH / CP Editor 等操作按对应入口触发；题源模块按设置读取原站。
-- JSON 备份为明文，不包含旧版密码/token 导入功能。
+[最新发布页](https://github.com/sxmqwq/new-exhloj/releases/latest)提供安装脚本和离线安装包；一般直接安装 `.user.js` 即可。仓库的 `release/` 只保留当前版本安装包，历史改动见 [更新记录](CHANGELOG.md)。
 
 ## 开发
 
-开发和 CI 统一使用 Node.js 24（见 `.node-version`），要求 Node.js >=24。打包与包结构检查另需 Python 3。
+需要 Node.js 24 和 Python 3。源码位于 `src/`，安装脚本位于 `dist/`。
 
 ```bash
-npm ci --ignore-scripts
-npx playwright install chromium
+npm ci
+npm run build
 npm run check
-npm test
 ```
 
-Linux 缺少浏览器依赖时可以运行 `npx playwright install --with-deps chromium`。已有 Chromium 的环境可通过 `EXHLOJ_CHROME` 指定可执行文件。
+构建、测试与目录说明见 [开发文档](docs/DEVELOPMENT.md)。遇到问题可提交 [Issue](https://github.com/sxmqwq/new-exhloj/issues)。
 
-默认构建使用仓库中已打包的 Markdown 渲染器，无需下载业务运行依赖：
-
-```bash
-npm run build
-npm run build:check
-```
-
-`build:check` 验证源码生成结果与 `dist/exhloj.user.js` 逐字一致。维护第三方渲染器时，可在安装开发依赖后运行：
-
-```bash
-npm run build:vendor
-npm run build
-npm test
-```
-
-依赖变更时同步更新 `THIRD_PARTY_NOTICES.txt`。生成安装包：
-
-```bash
-npm run package
-npm run package:check
-npm run package:source
-npm run package:source:check
-```
-
-输出为 `release/exhloj-<版本>.zip`，并更新 `VERSION.txt` 与 `SHA256SUMS`。调整版本时需要同时修改 `package.json` 与源码模板中的三个版本位置，构建器会检查一致性。
-
-`package:source` 先只读检查安装包，再在 `artifacts/` 生成有明确 `-install` / `-source` 后缀的发布文件和校验值，不需要 Git 元数据。`package:source:check` 检查源码包内容和暂存文件，遗漏 `.github` 或文件过期都会失败。
-
-`package:check` 只读核对当前安装包内的脚本、说明、许可证、版本及 SHA-256，CI 在重新生成安装包前运行它，防止把仓库中过期的 ZIP 掩盖掉。固定 ZIP 时间戳使同一环境重复打包得到相同文件。升级版本时也要同步 `package-lock.json` 的项目版本和安装说明首行。
-
-目录说明与维护要点见 [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)。
-
-## 验证
-
-检查包括 **108 组模拟页面浏览器场景、5 组本地 HTTP 会话场景和 3 组包结构检查**。前者覆盖七个模块及 OIerDb 的 24 条获奖记录示例；会话检查使用真实 HttpOnly Cookie、本地登录重定向、普通跳转和 PJAX，不拦截模拟 OJ 的 fetch 响应。全部检查均不需要真实 OJ 账号，输出在 `tests/output/`。
-
-验证记录见 [`docs/validation-result.json`](docs/validation-result.json)。这些检查不代表已经完成 HLOJ 登录态实测；站点特有模板或权限差异仍可能影响实际效果。
-
-切换页面后出现登录异常时，按 [`docs/SESSION.zh-CN.md`](docs/SESSION.zh-CN.md) 做对照定位。2.5.3 修复同页请求失败后无法重试、旧响应跨页面或账号进入缓存的问题；不清理站点 Cookie，也不将权限错误当作退出登录。
-
-仓库包含 `.github/workflows/test.yml`，在 push、PR 或手动触发时构建并运行浏览器检查。
-
-## 发布到 GitHub
-
-解压后，将目录内的文件上传到你的仓库根目录，包括 `.github`、`.gitignore` 和 `.gitattributes`。源码、构建产物、说明和测试已分开整理。
-
-推送与 `package.json` 一致的版本标签（如 `v2.6.1`）后，`release.yml` 先复用完整检查，再发布带版本的脚本、安装包、源码包及校验值。手动运行发布工作流时也必须选择对应标签；分支或不匹配的标签会被拒绝。相同版本的既有 Release 不会被覆盖。
-
-更改功能后先构建、生成并提交新安装包，再运行检查与完整测试。发布工作流不会在分支 push 或 PR 时发布 Release。
-
-## 来源与许可证说明
-
-原版 Extend HLOJ 的作者信息保留在脚本头部。重制范围和来源见 [`NOTICE.md`](NOTICE.md)，第三方代码许可证见 [`THIRD_PARTY_NOTICES.txt`](THIRD_PARTY_NOTICES.txt)。
+原版作者署名及参考来源见 [NOTICE.md](NOTICE.md)，第三方许可证见 [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt)。

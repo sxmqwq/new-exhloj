@@ -1,10 +1,15 @@
-name: Publish versioned release
+name: Publish release
 on:
   push:
+    branches: [main]
     tags: ['v*']
+    paths: ['package.json', '.github/workflows/release.yml']
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: release-${{ github.repository }}
+  cancel-in-progress: false
 jobs:
   checks:
     uses: ./.github/workflows/test.yml
@@ -24,21 +29,41 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version-file: '.node-version'
-      - name: Validate the selected tag
+      - name: Check version
+        id: version
         run: |
           VERSION=$(node -p 'require("./package.json").version')
-          test "$GITHUB_REF_TYPE" = tag
-          test "$GITHUB_REF_NAME" = "v$VERSION"
+          TAG="v$VERSION"
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            test "$GITHUB_REF_NAME" = "$TAG"
+          else
+            test "$GITHUB_REF_NAME" = main
+          fi
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-      - name: Download the checked installation and source packages
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Download verified packages
+        if: steps.version.outputs.exists != 'true'
         run: |
           gh run download "$GITHUB_RUN_ID" --name "exhloj-$VERSION-install" --dir artifacts
           gh run download "$GITHUB_RUN_ID" --name "exhloj-$VERSION-source" --dir source-artifact
           cmp artifacts/SHA256SUMS source-artifact/SHA256SUMS
           cp "source-artifact/exhloj-$VERSION-source.zip" artifacts/
-      - name: Verify files and publish
+      - name: Prepare release notes
+        if: steps.version.outputs.exists != 'true'
+        run: python3 scripts/release-notes.py --repository "$GH_REPO" --output "$RUNNER_TEMP/release-notes.md"
+      - name: Publish installation files
+        if: steps.version.outputs.exists != 'true'
         working-directory: artifacts
         run: |
           sha256sum --check SHA256SUMS
-          gh release create "$GITHUB_REF_NAME" --verify-tag --title "Extend HLOJ $VERSION" --generate-notes \
-            "exhloj-$VERSION.user.js" "exhloj-$VERSION-install.zip" "exhloj-$VERSION-source.zip" VERSION.txt SHA256SUMS
+          cp "exhloj-$VERSION.user.js" exhloj.user.js
+          sha256sum exhloj.user.js "exhloj-$VERSION-install.zip" > release-checksums.txt
+          mv release-checksums.txt SHA256SUMS
+          gh release create "$TAG" --target "$GITHUB_SHA" --latest \
+            --title "Extend HLOJ $VERSION" --notes-file "$RUNNER_TEMP/release-notes.md" \
+            exhloj.user.js "exhloj-$VERSION-install.zip" SHA256SUMS
