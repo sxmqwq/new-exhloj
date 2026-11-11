@@ -1,0 +1,43 @@
+{
+  "results": [
+    {
+      "uid": "洛谷/T23806",
+      "title": "Sum of a and b",
+      "src": "洛谷",
+      "url": "https://www.luogu.com.cn/problem/T23806",
+      "cos": 0.969,
+      "rr": null,
+      "base_rank": 1,
+      "also": [],
+      "original": "### Input\nThe input contains two number a and b.($1\\le a,b\\le 32767$). Both a and b are integer.\n\n### Output\nOutput a single integer.\n\n### Sample 1\nInput\n\nOutput\n\n1 2\n\n3\n\n### Hint\n$\\color{white}Just\\ output\\ an\\ integer,and\\ that\\ is\\ all.$",
+      "t0": "Given two integers $a$ and $b$ where $1 \\le a, b \\le 32767$, output their sum.",
+      "t1": "Given two integers, a and b, output their sum."
+    },
+    {
+      "uid": "洛谷/T395632",
+      "title": "Junk测试题",
+      "src": "洛谷",
+      "url": "https://www.luogu.com.cn/problem/T395632",
+      "cos": 0.9688,
+      "rr": null,
+      "base_rank": 2,
+      "also": [],
+      "original": "### Background\n```cpp\n#include<bits/stdc++.h>\nusing namespace std;\nlong long a, b;\nint main(){\ncin >> a >> b ;\ncout << a+b;\n}\n```\n\n### Description\n1\n\n### Input\n1\n\n### Output\n1\n\n### Hint\n1",
+      "t0": "Given two integers $a$ and $b$, calculate and output their sum.",
+      "t1": "Given two integers, output their sum."
+    },
+    {
+      "uid": "洛谷/U488165",
+      "title": "a+b",
+      "src": "洛谷",
+      "url": "https://www.luogu.com.cn/problem/U488165",
+      "cos": 0.9666,
+      "rr": null,
+      "base_rank": 3,
+      "also": [],
+      "original": "### Background\na+b\n\n### Description\na+b\n\n### Input\n第一行 a,b\n\n### Output\n一行，输出答案\n\n### Sample 1\nInput\n\nOutput\n\n1 1\n\n2\n\n### Sample 2\nInput\n\nOutput\n\n### Sample 3\nInput\n\nOutput\n\n### Sample 4\nInput\n\nOutput\n\n### Sample 5\nInput\n\nOutput\n\n### Sample 6\nInput\n\nOutput\n\n### Sample 7\nInput\n\nOutput\n\n### Sample 8\nInput\n\nOutput\n\n### Sample 9\nInput\n\nOutput\n\n### Sample 10\nInput\n\nOutput\n\n### Hint\n-1919810<a,b<1919810",
+      "t0": "Given two integers, $a$ and $b$, calculate and output their sum.\n\nInput:\nTwo integers $a$ and $b$ on a single line, separated by a space.\n\nOutput:\nA single line containing the sum $a + b$.\n\nSample Input:\n```\n1 1\n```\n\nSample Output:\n```\n2\n```",
+      "t1": "Given two integers, a and b, output their sum."
+    }
+  ]
+}

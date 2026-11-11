@@ -1,8 +1,8 @@
 {
-  "version": "2.7.0",
-  "scriptSha256": "8cabe680fe33d49bdd52931730fe4d300b020ac11cf335154353f5599e0e6e47",
+  "version": "2.8.0",
+  "scriptSha256": "5a48472250d7cd39525a8c37dcffeb19a2f72314c29fcb34431a1c4c82d87f68",
   "browser": "153.0.8010.0",
-  "passed": 111,
+  "passed": 122,
   "checks": [
     "core: guest fallback, lazy user menu, deduplication, no automatic writes/requests",
     "core: save UI switch and preserve ports across reinstall/page load",
@@ -29,6 +29,17 @@
     "remote: QOJ title defaults respect manual choices, disabled recognition and explicit origins",
     "remote: QOJ title defaults update with late titles and SPA navigation without duplicate or stale links",
     "remote: QOJ title defaults follow contest hide, shortcut and show settings on tid URLs",
+    "search: both live response schemas, explicit exact-query requests and manual-only source confirmation",
+    "search: candidate URLs map CF, Gym, QOJ, AtCoder and other sites without assuming a Luogu counterpart",
+    "search: previews preserve disabled or manual origins and all unrelated data until explicit save",
+    "search: independent engine failures, inert HTML and explicit alternative source selection",
+    "search: cancel, retry and page-memory result reuse never persist unconfirmed candidates",
+    "search: navigation, account changes and replaced problem contexts reject stale selections and saves",
+    "search: closing the panel or leaving the page cancels late results without affecting a new panel",
+    "search: input limits and selected engines do not silently truncate or send an empty query",
+    "search: malformed replies, invalid links, timeout and redirects remain retryable",
+    "search: edited queries disable old selections and late statement reload preserves new input",
+    "search: standalone search, explicit statement reload and contest visibility use the unified panel",
     "remote: current live Luogu HTML schema, statement copy and persistent metadata cache",
     "remote: current Luogu scale shows P10873 as purple and distinguishes the new cyan and black tiers",
     "remote: a previous-scale cache is replaced by live metadata without modifying local user data",
@@ -119,24 +130,35 @@
   "checkedAt": "2026-11-11",
   "node": "v24.22.1",
   "packaging": {
-    "version": "2.7.0",
+    "version": "2.8.0",
     "passed": 5,
     "failures": []
   },
   "session": {
-    "version": "2.7.0",
-    "scriptSha256": "8cabe680fe33d49bdd52931730fe4d300b020ac11cf335154353f5599e0e6e47",
+    "version": "2.8.0",
+    "scriptSha256": "5a48472250d7cd39525a8c37dcffeb19a2f72314c29fcb34431a1c4c82d87f68",
     "browser": "153.0.8010.0",
     "fixture": "local HTTP server; real HttpOnly cookies; no live OJ account",
     "passed": 0,
     "checks": [],
     "failure": {
       "check": "session: full navigation and plugin controls preserve the HttpOnly session",
-      "message": "page.goto: net::ERR_EMPTY_RESPONSE at http://oj.hailiangedu.com:35469/user/login\nCall log:\n\u001b[2m  - navigating to \"http://oj.hailiangedu.com:35469/user/login\", waiting until \"load\"\u001b[22m\n"
+      "message": "page.goto: net::ERR_EMPTY_RESPONSE at http://oj.hailiangedu.com:46637/user/login\nCall log:\n\u001b[2m  - navigating to \"http://oj.hailiangedu.com:46637/user/login\", waiting until \"load\"\u001b[22m\n"
     }
   },
-  "totalPassedLocally": 116,
+  "totalPassedLocally": 127,
   "liveSiteLoginVerified": false,
+  "liveSearchProbes": {
+    "query": "Given two integers a and b, output their sum.",
+    "yuantiji": {
+      "status": 200,
+      "candidates": 5
+    },
+    "cpret": {
+      "status": 200,
+      "pageCandidates": 20
+    }
+  },
   "limitations": [
     "Local HTTP session fixtures returned net::ERR_EMPTY_RESPONSE in this runtime; they must pass in GitHub Actions before merge.",
     "No live HLOJ account or Tampermonkey sandbox was used."

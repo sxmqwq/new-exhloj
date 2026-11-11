@@ -45,11 +45,12 @@ async function fixture(name, body, context = {}, options = {}) {
     window.GM_setValue = (key, value) => { window.__store[key] = value; };
     window.GM_registerMenuCommand = (name, fn) => window.__commands.push({ name, fn });
     window.GM_xmlhttpRequest = options => {
-      if (options.method === 'GET') {
-        window.__gm.push({ url: options.url, method: 'GET', headers: options.headers, anonymous: options.anonymous });
+      if (options.method === 'GET' || window.__remote[options.url] || window.__remote[options.url.split('?')[0]]) {
+        window.__gm.push({ url: options.url, method: options.method, headers: options.headers, anonymous: options.anonymous,
+          ...(options.data ? { payload: JSON.parse(options.data) } : {}) });
         const response = window.__remote[options.url] || window.__remote[options.url.split('?')[0]];
         if (!response) return queueMicrotask(() => options.onerror(new Error('Unexpected external URL')));
-        const timer = setTimeout(() => options.onload({ status: response.status || 200,
+        const timer = setTimeout(() => response.timeout ? options.ontimeout?.() : options.onload({ status: response.status || 200,
           responseText: response.text ?? JSON.stringify(response.json), finalUrl: response.finalUrl || options.url }), response.delay || 0);
         return { abort() { clearTimeout(timer); options.onabort?.(); } };
       }
@@ -396,6 +397,153 @@ async function openDataPage(page) { await page.locator('[data-exh-fallback]').cl
       assert.deepEqual(await f.page.evaluate(() => window.__gm), []); assert.equal(f.requests.length, 1); await f.done();
     }
   });
+  const searchURLs = { yuantiji: 'https://yuantiji.ac/api/search', cpret: 'https://cpret.online/api/search' };
+  const searchLive = {
+    [searchURLs.yuantiji]: { json: JSON.parse(fs.readFileSync('tests/fixtures/semantic-yuantiji.json', 'utf8')) },
+    [searchURLs.cpret]: { json: JSON.parse(fs.readFileSync('tests/fixtures/semantic-cpret.json', 'utf8')) },
+  };
+  async function searchFixture(options = {}) {
+    return fixture('problem_detail', remoteBody, { pdoc: { docId: 10, pid: 'S10', title: '求和', content: '给定两个整数 $a,b$，输出 $a+b$。', config: {}, ...options.pdoc } },
+      { storage: noAuto, ...options, remote: options.remote || searchLive });
+  }
+  async function openSearch(f) { await f.page.locator('#exhloj-local-remote [data-exh-action="remote-search"]').click(); }
+  async function finishSearch(f) {
+    await f.page.locator('[data-exh-action="remote-search-run"]').click();
+    await f.page.waitForFunction(() => document.querySelector('[data-exh-action="remote-search-cancel"]').disabled);
+  }
+  await check('search: both live response schemas, explicit exact-query requests and manual-only source confirmation', async () => {
+    const f = await searchFixture(); const before = await f.page.evaluate(() => JSON.stringify(window.__store));
+    assert.deepEqual(await f.page.evaluate(() => window.__gm), []); await openSearch(f);
+    assert.equal(await f.page.locator('#exhloj-search-query').inputValue(), '给定两个整数 $a,b$，输出 $a+b$。');
+    assert.deepEqual(await f.page.evaluate(() => window.__gm), []);
+    await f.page.locator('#exhloj-search-query').fill('Given two integers a and b, output their sum.'); await finishSearch(f);
+    const requests = await f.page.evaluate(() => window.__gm); assert.equal(requests.length, 2); assert.ok(requests.every(r => r.anonymous === true));
+    assert.equal(requests[0].method, 'POST'); assert.deepEqual(requests[0].payload, { query: 'Given two integers a and b, output their sum.', k: 20, rewrite: false, rerank: false, skip_short: false });
+    assert.equal(requests[1].method, 'GET'); assert.equal(new URL(requests[1].url).searchParams.get('q'), requests[0].payload.query);
+    assert.equal(await f.page.locator('[data-search-candidate]').count(), 6); assert.equal(await f.page.evaluate(() => JSON.stringify(window.__store)), before);
+    for (const [width, height, size] of [[1280, 900, 'desktop'], [400, 800, 'mobile']]) {
+      await f.page.setViewportSize({ width, height });
+      assert.equal(await f.page.locator('.exhloj-dialog-body').evaluate(n => n.scrollWidth <= n.clientWidth + 1), true);
+      await f.page.locator('#exhloj-local-dialog').screenshot({ path: `tests/output/search-${size}.png` });
+    }
+    await f.page.locator('[data-search-id="cpret-2"]').click(); assert.equal(await f.page.locator('#exhloj-origin-target').inputValue(), 'P1001');
+    assert.equal(await f.page.evaluate(() => JSON.stringify(window.__store)), before);
+    await f.page.locator('[data-exh-action="remote-save-origin"]').click();
+    const origin = await f.page.evaluate(() => JSON.parse(window.__store['exhloj.coreui.cache.v1'])['exhloj.remoteOrigins']['test/10']);
+    assert.equal(origin.type, 'luogu'); assert.equal(origin.target, 'P1001'); assert.equal(origin.luoguId, 'P1001');
+    assert.equal(await f.page.locator('#exhloj-local-remote a[href="https://www.luogu.com.cn/problem/P1001"]').count(), 1); await f.done();
+  });
+  await check('search: candidate URLs map CF, Gym, QOJ, AtCoder and other sites without assuming a Luogu counterpart', async () => {
+    for (const [url, type, target, lid] of [
+      ['https://codeforces.com/problemset/problem/1234/A?locale=en', 'codeforces', 'CF1234A', 'CF1234A'],
+      ['https://codeforces.com/gym/105924/problem/B', 'codeforces', 'CF105924B', 'CF105924B'],
+      ['https://qoj.ac/problem/9793/statement/zh_cn', 'qoj', '9793', ''],
+      ['https://atcoder.jp/contests/abc123/tasks/abc123_a?lang=en', 'atcoder', 'abc123_a', 'AT_abc123_a'],
+      ['https://acm.hdu.edu.cn/showproblem.php?pid=8265', 'other', '', ''],
+    ]) {
+      const f = await searchFixture({ remote: { [searchURLs.yuantiji]: { json: { results: [{ title: '候选', url, cos: 0.9 }] } } } }); await openSearch(f);
+      await f.page.locator('[data-search-engine="cpret"]').uncheck(); await finishSearch(f); await f.page.locator('[data-search-id="yuantiji-0"]').click();
+      assert.equal(await f.page.locator('#exhloj-origin-type').inputValue(), type); assert.equal(await f.page.locator('#exhloj-origin-target').inputValue(), target); assert.equal(await f.page.locator('#exhloj-origin-luoguId').inputValue(), lid);
+      if (type === 'other') assert.match(await f.page.locator('#exhloj-origin-extra').inputValue(), /pid=8265/);
+      assert.equal(await f.page.locator('#exhloj-origin-difficulty').inputValue(), ''); await f.done();
+    }
+  });
+  await check('search: previews preserve disabled or manual origins and all unrelated data until explicit save', async () => {
+    for (const prior of [{ type: 'none' }, { type: 'qoj', target: '18004' }]) {
+      const storage = { ...noAuto, 'exhloj.coreui.cache.v1': JSON.stringify({ 'exhloj.remoteOrigins': { 'test/10': prior, 'test/11': { type: 'qoj', target: '18005' } }, 'exhloj.user': { keep: 'untouched' } }) };
+      const f = await searchFixture({ storage }); await openSearch(f); await finishSearch(f); await f.page.locator('[data-search-id="cpret-2"]').click();
+      assert.deepEqual(await f.page.evaluate(() => window.__store), storage);
+      await f.page.locator('[data-exh-action="remote-save-origin"]').click();
+      const cache = await f.page.evaluate(() => JSON.parse(window.__store['exhloj.coreui.cache.v1'])); assert.equal(cache['exhloj.remoteOrigins']['test/10'].target, 'P1001');
+      assert.equal(cache['exhloj.remoteOrigins']['test/11'].target, '18005'); assert.deepEqual(cache['exhloj.user'], { keep: 'untouched' }); await f.done();
+    }
+  });
+  await check('search: independent engine failures, inert HTML and explicit alternative source selection', async () => {
+    const payload = { total: 2, html: '<img src="https://invalid.example/track" onerror="window.injected=1"><script>window.injected=1</script><ol class="result-list">'
+      + '<li class="result-card"><a class="result-title" href="javascript:alert(1)">bad</a></li>'
+      + '<li class="result-card"><a class="result-title" href="https://qoj.ac/problem/9793">&lt;img onerror=1&gt;</a><div class="result-meta"><span class="oj-tag">QOJ</span>'
+      + '<details class="dups"><li><a class="t" href="https://www.luogu.com.cn/problem/P10873">另一个题源</a><span class="num">0.9</span></li></details></div><div class="score-col"><span class="score-num">0.91</span></div></li></ol>' };
+    const f = await searchFixture({ remote: { [searchURLs.yuantiji]: { status: 429, json: {} }, [searchURLs.cpret]: { json: payload } } });
+    await openSearch(f); await finishSearch(f); assert.match(await f.page.locator('[data-search-engine-results="yuantiji"]').textContent(), /稍后再试/);
+    assert.equal(await f.page.locator('[data-search-candidate]').count(), 2); assert.equal(await f.page.evaluate(() => window.injected), undefined); assert.equal(await f.page.locator('#exhloj-search-results img, #exhloj-search-results script').count(), 0);
+    assert.match(await f.page.locator('[data-search-candidate="cpret-0"] a').first().textContent(), /<img onerror=1>/);
+    await f.page.locator('[data-search-candidate="cpret-0"] summary').click(); await f.page.locator('[data-search-id="cpret-0-0"]').click(); assert.equal(await f.page.locator('#exhloj-origin-target').inputValue(), 'P10873'); await f.done();
+  });
+  await check('search: cancel, retry and page-memory result reuse never persist unconfirmed candidates', async () => {
+    const remote = Object.fromEntries(Object.entries(searchLive).map(([url, response]) => [url, { ...response, delay: 700 }]));
+    const f = await searchFixture({ remote }); await openSearch(f); await f.page.locator('[data-exh-action="remote-search-run"]').click();
+    await f.page.waitForFunction(() => window.__gm.length === 2); await f.page.locator('[data-exh-action="remote-search-cancel"]').click();
+    await f.page.waitForFunction(() => document.querySelector('[data-exh-action="remote-search-cancel"]').disabled);
+    assert.equal(await f.page.locator('[data-search-candidate]').count(), 0); assert.match(await f.page.locator('#exhloj-search-results').textContent(), /已停止搜索/);
+    await f.page.evaluate(() => { for (const item of Object.values(window.__remote)) item.delay = 0; }); await finishSearch(f);
+    assert.equal(await f.page.locator('[data-search-candidate]').count(), 6); assert.equal(await f.page.evaluate(() => window.__gm.length), 4);
+    await finishSearch(f); assert.equal(await f.page.evaluate(() => window.__gm.length), 4); assert.match(await f.page.locator('#exhloj-search-results').textContent(), /复用/);
+    assert.deepEqual(await f.page.evaluate(() => window.__store), noAuto); await f.done();
+  });
+  await check('search: navigation, account changes and replaced problem contexts reject stale selections and saves', async () => {
+    for (const mode of ['route', 'account', 'problem', 'editor', 'modified-origin']) {
+      const f = await searchFixture(); await openSearch(f); await finishSearch(f);
+      if (mode === 'editor' || mode === 'modified-origin') await f.page.locator('[data-search-id="cpret-2"]').click();
+      await f.page.evaluate(mode => {
+        if (mode === 'account') window.UserContext._id = 99;
+        else if (mode === 'problem') window.UiContext.pdoc.docId = 11;
+        else if (mode === 'modified-origin') window.__store['exhloj.coreui.cache.v1'] = JSON.stringify({ 'exhloj.remoteOrigins': { 'test/10': { type: 'qoj', target: '100' } } });
+        else { history.pushState({}, '', '/d/test/p/S11'); window.UiContext.pdoc = { docId: 11, pid: 'S11', title: '新题', content: '新题面', config: {} }; }
+        document.querySelector(mode === 'editor' || mode === 'modified-origin' ? '[data-exh-action="remote-save-origin"]' : '[data-search-id="cpret-2"]').click();
+      }, mode);
+      await f.page.waitForFunction(() => document.querySelector('#exhloj-local-toast')?.dataset.error === 'true');
+      const saved = await f.page.evaluate(() => JSON.parse(window.__store['exhloj.coreui.cache.v1'] || '{}')['exhloj.remoteOrigins'] || {});
+      assert.equal(saved['test/11'], undefined); assert.equal(saved['test/10']?.target, mode === 'modified-origin' ? '100' : undefined); await f.done();
+    }
+  });
+  await check('search: closing the panel or leaving the page cancels late results without affecting a new panel', async () => {
+    for (const mode of ['close', 'tab', 'route']) {
+      const f = await searchFixture({ remote: Object.fromEntries(Object.entries(searchLive).map(([url, value]) => [url, { ...value, delay: 500 }])) });
+      await openSearch(f); await f.page.locator('[data-exh-action="remote-search-run"]').click(); await f.page.waitForFunction(() => window.__gm.length === 2);
+      if (mode === 'close') await f.page.locator('[data-exh-action="close"]').click();
+      else if (mode === 'tab') await panelTab(f.page, 'settings');
+      else await f.page.evaluate(() => { history.pushState({}, '', '/d/test/p/S11'); window.UiContext.pdoc.docId = 11; document.body.append(document.createElement('p')); });
+      await f.page.waitForTimeout(600); assert.equal(await f.page.locator('[data-search-candidate]').count(), 0); assert.deepEqual(await f.page.evaluate(() => window.__store), noAuto);
+      if (mode === 'tab') assert.equal(await f.page.locator('#exhloj-local-settings').count(), 1); await f.done();
+    }
+  });
+  await check('search: input limits and selected engines do not silently truncate or send an empty query', async () => {
+    const f = await searchFixture(); await openSearch(f); await f.page.locator('#exhloj-search-query').fill(''); await finishSearch(f);
+    assert.equal(await f.page.evaluate(() => window.__gm.length), 0);
+    await f.page.locator('#exhloj-search-query').fill('x'.repeat(16001)); await finishSearch(f); assert.equal(await f.page.evaluate(() => window.__gm.length), 0);
+    await f.page.locator('#exhloj-search-query').fill('树'.repeat(1000)); await finishSearch(f);
+    assert.equal(await f.page.evaluate(() => window.__gm.length), 1); assert.equal(await f.page.evaluate(() => window.__gm[0].payload.query.length), 1000);
+    assert.match(await f.page.locator('[data-search-engine-results="cpret"]').textContent(), /没有向 CPRet 发送/);
+    await f.page.locator('[data-search-engine="yuantiji"]').uncheck(); await f.page.locator('[data-search-engine="cpret"]').uncheck(); await f.page.locator('#exhloj-search-query').fill('short'); await finishSearch(f);
+    assert.equal(await f.page.evaluate(() => window.__gm.length), 1); await f.done();
+  });
+  await check('search: malformed replies, invalid links, timeout and redirects remain retryable', async () => {
+    for (const response of [{ json: {} }, { text: '<html>login</html>' }, { timeout: true }, { json: { results: [{ url: 'data:text/html,x' }] } }, { json: { results: [] }, finalUrl: 'https://elsewhere.example/' }]) {
+      const f = await searchFixture({ remote: { [searchURLs.yuantiji]: response } }); await openSearch(f); await f.page.locator('[data-search-engine="cpret"]').uncheck(); await finishSearch(f);
+      assert.equal(await f.page.locator('[data-search-candidate]').count(), 0); assert.equal(await f.page.locator('[data-exh-action="remote-search-run"]').isEnabled(), true);
+      assert.deepEqual(await f.page.evaluate(() => window.__store), noAuto); await f.done();
+    }
+  });
+  await check('search: edited queries disable old selections and late statement reload preserves new input', async () => {
+    const f = await searchFixture(); await openSearch(f); await finishSearch(f);
+    await f.page.locator('#exhloj-search-query').fill('new query'); assert.equal(await f.page.locator('[data-search-id="cpret-2"]').isDisabled(), true);
+    assert.match(await f.page.locator('#exhloj-search-results').textContent(), /题意已修改/); await finishSearch(f); assert.equal(await f.page.locator('[data-search-id="cpret-2"]').isEnabled(), true); await f.done();
+    const g = await searchFixture({ pdoc: { content: '' }, api: { 'GET /d/test/p/P1': { delay: 350, body: { pdoc: { docId: 10, pid: 'S10', title: '求和', content: 'server statement', config: {} } } } } });
+    await openSearch(g); await g.page.locator('[data-exh-action="remote-search-fill"]').click(); await g.page.locator('#exhloj-search-query').fill('my new draft');
+    await g.page.waitForFunction(() => document.querySelector('#exhloj-local-toast')?.textContent.includes('保留当前输入'));
+    assert.equal(await g.page.locator('#exhloj-search-query').inputValue(), 'my new draft'); assert.equal(await g.page.evaluate(() => window.__gm.length), 0); await g.done();
+  });
+  await check('search: standalone search, explicit statement reload and contest visibility use the unified panel', async () => {
+    const f = await fixture('homepage', '', {}, { remote: searchLive }); await f.page.locator('[data-exh-fallback]').click(); await panelTab(f.page, 'remote'); await f.page.locator('[data-exh-action="remote-search"]').click();
+    await f.page.locator('#exhloj-search-query').fill('A+B'); await finishSearch(f); assert.equal(await f.page.locator('[data-search-candidate]').count(), 6); assert.equal(await f.page.locator('[data-exh-action="remote-search-select"]').count(), 0); await f.done();
+    const g = await searchFixture(); await openSearch(g); await g.page.locator('#exhloj-search-query').fill('edited'); await g.page.locator('[data-exh-action="remote-search-fill"]').click();
+    assert.equal(await g.page.locator('#exhloj-search-query').inputValue(), '给定两个整数 $a,b$，输出 $a+b$。'); await g.page.locator('[data-exh-action="remote-search-copy"]').click();
+    assert.equal(await g.page.evaluate(() => window.__clipboard.at(-1)), '给定两个整数 $a,b$，输出 $a+b$。'); assert.equal(await g.page.evaluate(() => window.__gm.length), 0); await g.done();
+    const h = await fixture('contest_detail_problem', remoteBody, { pdoc: { docId: 10, title: '题目', content: 'A+B', config: {} } }, { storage: { 'exhloj.coreui.settings.v1': JSON.stringify({ remoteContest: 'shortcut', remoteAuto: false }) } });
+    assert.equal(await h.page.locator('#exhloj-local-remote [data-exh-action="remote-search"]').count(), 0); await h.page.keyboard.press('Control+q');
+    await h.page.waitForSelector('#exhloj-local-remote [data-exh-action="remote-search"]'); assert.equal(await h.page.evaluate(() => window.__gm.length), 0); await h.done();
+  });
+
   await check('remote: current live Luogu HTML schema, statement copy and persistent metadata cache', async () => {
     const f = await fixture('problem_detail', remoteBody, originContext('luogu', 'P1001'), { remote: { [metaURL]: { text: fs.readFileSync('tests/fixtures/luogu-problem.response', 'utf8') } } });
     await f.page.waitForSelector('[data-exh-difficulty="1"]');
