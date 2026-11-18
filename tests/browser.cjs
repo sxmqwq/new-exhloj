@@ -79,14 +79,21 @@ async function openTitleMenu(page) {
 }
 async function titleAction(page, action) { await (await openTitleMenu(page)).locator('[data-exh-action="' + action + '"]').click(); }
 async function panelTab(page, tab) { await page.locator(`[data-panel-tab="${tab}"]`).click(); }
-async function openSettingsPage(page) { await page.locator('[data-exh-fallback]').click(); await panelTab(page, 'settings'); }
-async function openDataPage(page) { await page.locator('[data-exh-fallback]').click(); await panelTab(page, 'data'); }
+async function openControlCenter(page) {
+  const menu = page.locator('.exhloj-local-menu a');
+  if (await menu.isVisible()) await menu.click();
+  else await page.evaluate(() => window.__commands.find(command => command.name === 'Extend HLOJ').fn());
+  await page.locator('#exhloj-local-dialog[open]').waitFor();
+}
+async function openSettingsPage(page) { await openControlCenter(page); await panelTab(page, 'settings'); }
+async function openDataPage(page) { await openControlCenter(page); await panelTab(page, 'data'); }
 (async () => {
   browser = await chromium.launch({ ...(process.env.EXHLOJ_CHROME ? { executablePath: process.env.EXHLOJ_CHROME } : {}), headless: true, args: ['--no-sandbox'] });
-  await check('core: guest fallback, lazy user menu, deduplication, no automatic writes/requests', async () => {
-    const f = await fixture('homepage', '<div class="section">Hi</div>'); const { page } = f;
-    assert.equal(await page.locator('[data-exh-fallback]').count(), 1);
-    await page.locator('[data-exh-fallback]').click();
+  await check('core: search stays clickable, userscript command and lazy account menu open the same panel', async () => {
+    const f = await fixture('homepage', '<input id="site-search" aria-label="搜索" style="position:fixed;bottom:18px;right:16px;width:125px;height:38px">'); const { page } = f;
+    await page.locator('#site-search').click(); assert.equal(await page.locator('#site-search').evaluate(node => node === document.activeElement), true);
+    assert.equal(await page.locator('[data-exh-fallback]').count(), 0);
+    await openControlCenter(page);
     assert.equal(await page.locator('#exhloj-local-dialog').isVisible(), true);
     await page.locator('[data-exh-action="close"]').click();
     await page.evaluate(() => document.body.insertAdjacentHTML('beforeend', '<ol id="menu-nav-user"><li><a href="/file">Files</a></li><li><a href="/home/domain">Domains</a></li><li><a href="Error: No route found for name: x">Broken</a></li></ol>'));
@@ -111,7 +118,7 @@ async function openDataPage(page) { await page.locator('[data-exh-fallback]').cl
     const g = await fixture('problem_detail', '<ul class="problem__tags"></ul>', { pdoc: { content: 'test' } }, { storage });
     assert.equal(await (await openTitleMenu(g.page)).locator('[data-exh-action="problem-copy"],[data-exh-action="cph"],[data-exh-action="editor"]').count(), 0);
     assert.equal(await g.page.locator('html.exhloj-local-rounded').count(), 0);
-    assert.equal(await g.page.locator('[data-exh-fallback]').count(), 1); await g.done();
+    assert.equal(await g.page.locator('[data-exh-fallback]').count(), 0); await g.done();
   });
   await check('panel: a single menu entry replaces old tool links and preserves native account actions', async () => {
     const f = await fixture('homepage', '<ol id="menu-nav-user"><li><a href="/home/domain">我的域</a></li><li><a href="/file">我的文件</a></li><li><a href="/user/logout">登出</a></li><li data-exh-work-menu="contest-helper">比赛助手</li><li data-exh-work-menu="juan-open">卷王监视器</li><li data-exh-work-menu="user-open">用户工具</li></ol>');
@@ -123,7 +130,7 @@ async function openDataPage(page) { await page.locator('[data-exh-fallback]').cl
     assert.equal(f.requests.length, 1); assert.deepEqual(await f.page.evaluate(() => window.__gm), []); await f.done();
   });
   await check('panel: all tools and automatic attendance settings share the same navigable dialog', async () => {
-    const f = await fixture('homepage', ''); await f.page.locator('[data-exh-fallback]').click();
+    const f = await fixture('homepage', ''); await openControlCenter(f.page);
     await f.page.locator('[data-exh-action="contest-helper"]').click(); assert.equal(await f.page.locator('#exhloj-contest-form').count(), 1);
     await f.page.locator('[data-exh-action="panel-attend"]').click(); assert.equal(await f.page.locator('#exhloj-attend-options').evaluate(node => node.open), true);
     assert.equal(await f.page.locator('[name="autoAttendTargets"]').isVisible(), true);
@@ -135,7 +142,7 @@ async function openDataPage(page) { await page.locator('[data-exh-fallback]').cl
   });
   await check('panel: disabled tools can be enabled in settings and the dashboard fits desktop and mobile', async () => {
     const f = await fixture('homepage', '', {}, { storage: { 'exhloj.coreui.settings.v1': { contestHelper: false } } });
-    await f.page.locator('[data-exh-fallback]').click(); assert.equal(await f.page.locator('.exhloj-panel-card[data-exh-action="contest-helper"]').isDisabled(), true);
+    await openControlCenter(f.page); assert.equal(await f.page.locator('.exhloj-panel-card[data-exh-action="contest-helper"]').isDisabled(), true);
     await panelTab(f.page, 'contest'); await f.page.locator('[data-exh-action="panel-settings"]').click(); await f.page.locator('[name="contestHelper"]').check(); await f.page.locator('[data-exh-action="save-settings"]').click();
     await panelTab(f.page, 'contest'); assert.equal(await f.page.locator('#exhloj-contest-form').count(), 1); await panelTab(f.page, 'home');
     for (const [width, height, name] of [[1280, 900, 'desktop'], [400, 800, 'mobile']]) {
@@ -203,16 +210,79 @@ async function openDataPage(page) { await page.locator('[data-exh-fallback]').cl
     await titleAction(f.page, 'problem-copy');
     assert.equal(f.requests.length, 2); assert.equal(f.requests[1].method, 'GET'); await f.done();
   });
-  await check('ui: homework title/files, filename encoding and no duplicate tables', async () => {
-    const f = await fixture('homework_detail', '<div class="section"><div class="section__header"><h1>Homework Introduction</h1></div></div>', {}, { json: { tdoc: { _id: 'hw', title: '<b>Title</b>', files: [{ name: 'a #&中文.txt', size: 2048 }] } } });
-    await f.page.waitForSelector('#exhloj-local-homework-files');
-    assert.equal(await f.page.locator('.section__header h1').first().innerText(), 'Homework Introduction - <b>Title</b>');
-    const href = await f.page.locator('#exhloj-local-homework-files a').getAttribute('href');
-    assert.equal(href, '/d/test/homework/hw/file/a%20%23%26%E4%B8%AD%E6%96%87.txt');
-    assert.equal(await f.page.locator('#exhloj-local-homework-files .col--size').innerText(), '2.0 KiB');
-    await f.page.evaluate(() => document.body.append(document.createElement('p')));
-    await f.page.waitForTimeout(450);
-    assert.equal(await f.page.locator('#exhloj-local-homework-files').count(), 1); assert.equal(f.requests.length, 2); await f.done();
+  const fileHeader = '<div class="section"><div class="section__header"><h1>介绍</h1></div></div>';
+  await check('attachments: homework PDF is inside its helper, direct downloads handle Unicode and zero bytes, mobile fits', async () => {
+    const id = '6afc2eebffdcf3e7f6e6420e', root = '/d/pnoi/homework/' + id, file = '20261118-pre.pdf', unicode = 'a #&中文.txt';
+    const tdoc = { docId: id, title: '<b>Title</b>', files: [
+      { name: file, size: 144794 }, { name: unicode, size: 2048 }, { name: 'long'.repeat(32) + '.txt', size: 0 }, { name: file, size: 144794 },
+    ] };
+    const f = await fixture('homework_detail', fileHeader, {}, { path: root, api: {
+      ['GET ' + root]: { body: { tdoc } },
+    }, strictApi: true }); const p = f.page;
+    await p.getByRole('heading', { name: 'Homework Introduction - <b>Title</b>', exact: true }).waitFor();
+    assert.equal(await p.getByText(file, { exact: true }).count(), 0); assert.equal(await p.locator('#exhloj-local-homework-files').count(), 0);
+    assert.equal(await p.locator('#exhloj-title-toggle').innerText(), '作业工具');
+    const menu = await openTitleMenu(p); await menu.getByRole('menuitem', { name: '作业助手', exact: true }).click();
+    const box = p.getByRole('region', { name: '作业附件（3）' });
+    assert.equal(await box.getByRole('link', { name: unicode }).getAttribute('href'), root + '/file/public/' + encodeURIComponent(unicode));
+    assert.deepEqual(await box.locator('small').allTextContents(), ['141.4 KiB', '2.0 KiB', '0 B']);
+    assert.equal(f.requests.length, 2, 'one document navigation and one shared metadata request');
+    assert.equal(await box.getByRole('link', { name: file }).getAttribute('href'), root + '/file/public/' + file);
+    assert.equal(await box.getByRole('link', { name: file }).getAttribute('download'), file);
+    await p.setViewportSize({ width: 375, height: 720 });
+    assert.ok(await box.evaluate(node => node.scrollWidth <= node.clientWidth + 1));
+    await p.locator('[data-exh-action="close"]').click(); await titleAction(p, 'contest-helper');
+    assert.equal(await box.locator('a').count(), 3); assert.equal(f.requests.length, 2); await f.done();
+  });
+  function nativeFileSection(path, control = '') {
+    return '<section id="site-files" class="section"><div class="section__header"><h1>Files</h1>' + control + '</div>' +
+      '<div class="section__body files" data-type="private" data-fragment-id="files-private"><table><tbody>' +
+      '<tr data-filename="round.pdf" data-size="32"><td class="col--name"><a href="' + path + '">round.pdf</a></td><td class="col--size">32 B</td></tr>' +
+      '</tbody></table></div></section>';
+  }
+  await check('attachments: contest helper keeps native participant download URLs and leaves management controls intact', async () => {
+    const root = '/d/test/contest/42', url = root + '/file/private/round.pdf?from=site', tdoc = { docId: '42', files: [{ name: 'public.in' }], privateFiles: [{ name: 'not-released.zip' }] };
+    const f = await fixture('contest_detail', fileHeader + nativeFileSection(url), { tdoc }, { path: root });
+    const p = f.page; assert.equal(await p.locator('#site-files').isVisible(), false);
+    await titleAction(p, 'contest-helper'); const box = p.getByRole('region', { name: '比赛附件（2）' });
+    assert.equal(await box.getByRole('link', { name: 'round.pdf' }).getAttribute('href'), 'https://oj.hailiangedu.com' + url);
+    assert.equal(await box.getByRole('link', { name: 'public.in' }).getAttribute('href'), root + '/file/public/public.in');
+    assert.equal(await box.getByText('not-released.zip').count(), 0); assert.equal(await box.locator('small').first().innerText(), '—');
+    assert.equal(f.requests.length, 1);
+    await panelTab(p, 'settings'); await p.locator('[name="contestHelper"]').uncheck(); await p.locator('[data-exh-action="save-settings"]').click();
+    await p.locator('[data-exh-action="close"]').click(); await p.locator('#site-files').waitFor(); await f.done();
+    for (const [name, control] of [['contest_manage', ''], ['contest_detail', '<button type="button">管理</button>']]) {
+      const g = await fixture(name, fileHeader + nativeFileSection(url, control), { tdoc }, { path: name === 'contest_manage' ? root + '/manage' : root });
+      assert.equal(await g.page.locator('#site-files').isVisible(), true); await g.done();
+    }
+  });
+  await check('attachments: scoreboard reads detail on open, retarget clears old links, a denied read can be retried', async () => {
+    const a = '/d/test/contest/11', b = '/d/other/homework/12'; let attempts = 0;
+    const f = await fixture('contest_scoreboard', fileHeader, { tdoc: { docId: '11' } }, { path: a + '/scoreboard', strictApi: true, api: req => {
+      const path = new URL(req.url()).pathname;
+      if (path === a) return { body: { tdoc: { docId: '11', files: [{ name: 'old.txt' }] } } };
+      if (path === b) return ++attempts === 1 ? { status: 403 } : { body: { tdoc: { docId: '12' } } };
+    } });
+    const p = f.page, box = p.locator('#exhloj-contest-files'), form = p.locator('#exhloj-contest-form'); assert.equal(f.requests.length, 1);
+    await titleAction(p, 'contest-helper'); await box.getByRole('link', { name: 'old.txt' }).waitFor();
+    await form.locator('[name="domain"]').fill('other'); await form.locator('[name="kind"]').selectOption('homework'); await form.locator('[name="tid"]').fill('12');
+    assert.equal(await box.locator('a').count(), 0); assert.equal(f.requests.length, 2);
+    await box.getByRole('button', { name: '查看附件' }).click(); await box.getByText(/403/).waitFor();
+    await box.getByRole('button', { name: '重试' }).click(); await box.getByText('暂无可下载的附件。').waitFor();
+    assert.equal(await box.getByRole('heading').innerText(), '作业附件'); assert.equal(attempts, 2); await f.done();
+  });
+  await check('attachments: late replies cannot repopulate a different target or survive a route change', async () => {
+    const a = '/d/test/homework/11', other = '/d/test/homework/12';
+    const f = await fixture('homework_scoreboard', fileHeader, {}, { path: a + '/scoreboard', strictApi: true, api: {
+      ['GET ' + a]: { delay: 450, body: { tdoc: { docId: '11', files: [{ name: 'old.txt' }] } } },
+      ['GET ' + other]: { body: { tdoc: { docId: '12', files: [{ name: 'new.txt' }] } } },
+    } });
+    const p = f.page, box = p.locator('#exhloj-contest-files');
+    await titleAction(p, 'contest-helper'); await p.locator('#exhloj-contest-form [name="tid"]').fill('12');
+    await box.getByRole('button', { name: '查看附件' }).click(); await box.getByRole('link', { name: 'new.txt' }).waitFor();
+    await p.waitForTimeout(500); assert.deepEqual(await box.locator('a').allTextContents(), ['new.txt']);
+    await p.evaluate(() => { history.pushState({}, '', '/d/test/homework/13/scoreboard'); window.dispatchEvent(new Event('pjax:end')); });
+    await p.locator('#exhloj-local-dialog').waitFor({ state: 'hidden' }); await f.done();
   });
   await check('ui: dynamic scoreboard medals and visible earliest record recalculation', async () => {
     const f = await fixture('homework_scoreboard', '<h2 class="text-center">Round</h2><div class="section__table-container"><table class="data-table"><tbody><tr><td class="col--rank">1</td><td class="col--problem"><a href="/record/680000020000000000000001">50</a></td></tr><tr><td class="col--rank">2</td><td class="col--problem"><a href="/record/680000010000000000000001">100</a></td></tr></tbody></table></div>', {}, { path: '/d/test/homework/hw/scoreboard' });
@@ -653,7 +723,7 @@ async function openDataPage(page) { await page.locator('[data-exh-fallback]').cl
     assert.equal(await g.page.locator('#exhloj-search-query').inputValue(), 'my new draft'); assert.equal(await g.page.evaluate(() => window.__gm.length), 0); await g.done();
   });
   await check('search: standalone search, explicit statement reload and contest visibility use the unified panel', async () => {
-    const f = await fixture('homepage', '', {}, { remote: searchLive }); await f.page.locator('[data-exh-fallback]').click(); await panelTab(f.page, 'remote'); await f.page.locator('[data-exh-action="remote-search"]').click();
+    const f = await fixture('homepage', '', {}, { remote: searchLive }); await openControlCenter(f.page); await panelTab(f.page, 'remote'); await f.page.locator('[data-exh-action="remote-search"]').click();
     await f.page.locator('#exhloj-search-query').fill('A+B'); await finishSearch(f); assert.equal(await f.page.locator('[data-search-candidate]').count(), 6); assert.equal(await f.page.locator('[data-exh-action="remote-search-select"]').count(), 0); await f.done();
     const g = await searchFixture(); await openSearch(g); await g.page.locator('#exhloj-search-query').fill('edited'); await g.page.locator('[data-exh-action="remote-search-fill"]').click();
     assert.equal(await g.page.locator('#exhloj-search-query').inputValue(), '给定两个整数 $a,b$，输出 $a+b$。'); await g.page.locator('[data-exh-action="remote-search-copy"]').click();
@@ -891,7 +961,7 @@ async function openDataPage(page) { await page.locator('[data-exh-fallback]').cl
   const fast = extra => ({ 'exhloj.coreui.settings.v1': { helperDelay: 100, ...extra } });
   const oid = (days, suffix = 1) => Math.floor((Date.now() - days * 86400000) / 1000).toString(16).padStart(8, '0') + suffix.toString(16).padStart(16, '0');
   const tdoc = { docId: tid, title: 'Fixture "Contest"', pids: [1, 2], beginAt: new Date(Date.now() - 3600000).toISOString(), endAt: new Date(Date.now() + 3600000).toISOString(), rule: 'oi' };
-  async function openWork(f, action) { await f.page.locator('[data-exh-fallback]').click(); await f.page.locator(`#exhloj-local-dialog [data-exh-action="${action}"]`).click(); }
+  async function openWork(f, action) { await openControlCenter(f.page); await f.page.locator(`#exhloj-local-dialog [data-exh-action="${action}"]`).click(); }
   async function downloaded(f, action) { const pending = f.page.waitForEvent('download'); await f.page.locator(`[data-exh-action="${action}"]`).click(); return fs.readFileSync(await (await pending).path()); }
   async function finished(f, kind) { await f.page.waitForFunction(kind => /^(已完成|完成|未完成|已取消)/.test(document.querySelector(`[data-work-progress="${kind}"]`)?.textContent), kind); }
   async function juanJSON(f) { return JSON.parse((await downloaded(f, 'juan-json')).toString()); }

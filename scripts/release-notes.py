@@ -19,7 +19,7 @@ def release_notes(root, repository):
         f'### 安装与更新\n\n'
         f'1. 安装 [Tampermonkey](https://www.tampermonkey.net/)。\n'
         f'2. 点击 [安装脚本]({base}/releases/download/v{version}/exhloj.user.js)，按提示安装或更新。\n'
-        f'3. 刷新 OJ，在用户名菜单中点击 **Extend HLOJ**。\n\n'
+        f'3. 刷新 OJ，从用户名菜单或油猴菜单打开 **Extend HLOJ**。\n\n'
         f'也可以下载下方的 **exhloj-{version}-install.zip**，解压后安装其中的 `.user.js` 文件。更新现有脚本会沿用本地设置和资料。\n\n'
         f'### 本次更新\n\n{entry.group(1).strip()}\n\n'
         f'完整操作说明见 [项目首页]({base}#readme)。\n'

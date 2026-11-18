@@ -1,9 +1,9 @@
-Extend HLOJ 2.9.1
+Extend HLOJ 2.9.2
 
 安装与更新
 1. 安装 Tampermonkey：https://www.tampermonkey.net/
 2. 打开 https://raw.githubusercontent.com/sxmqwq/new-exhloj/main/dist/exhloj.user.js ，按提示安装或更新。
-3. 刷新 OJ，在用户名菜单中点击 Extend HLOJ；没有用户名菜单时使用右下角入口。
+3. 刷新 OJ，在用户名菜单中点击 Extend HLOJ；也可从浏览器的油猴菜单选择 Extend HLOJ。
 离线安装可下载发布页中的安装包，解压后安装 .user.js 文件。
 发布页：https://github.com/sxmqwq/new-exhloj/releases/latest
 更新现有脚本会沿用本地设置与资料。面板标题中可查看当前版本。
@@ -13,7 +13,9 @@ Extend HLOJ 2.9.1
 题目标题右侧有“题目工具”：复制题面、发送到编辑器、搜索与配置题源都在这里。
 已识别的题号、难度和 CF Rating 显示在时间、内存旁；未识别时可直接点“查找原题”。
 
-比赛
+作业和比赛
+作业详情或成绩表 → 作业工具 → 作业助手；比赛详情或榜单 → 比赛工具 → 比赛助手。
+附件列出文件名与大小，点击文件名即可下载。更换目标后可点击“查看附件”。
 可导出题面和附件 ZIP、提交 CSV / JSON、Ghost。提交记录导出不含源码。
 填写比赛或作业的域、类型和 ID；在对应页面打开时会自动带入。
 公开附件按原目录打包，缺失内容会写入包内的报告。

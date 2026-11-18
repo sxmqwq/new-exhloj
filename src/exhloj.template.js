@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Extend HLOJ
 // @namespace    exhloj-local
-// @version      2.9.1
+// @version      2.9.2
 // @description  HLOJ 训练助手：题源与难度、比赛、练习统计、用户资料和 Rating。
 // @homepageURL  https://github.com/sxmqwq/new-exhloj
 // @supportURL   https://github.com/sxmqwq/new-exhloj/issues
@@ -54,9 +54,9 @@
   if (!(location.hostname === 'oj.hailiangedu.com' ||
       location.host === 'www.nfls.com.cn:10611' || /(^|\.)oifha\.com$/.test(location.hostname))) return;
   if (document.documentElement.dataset.exhlojCoreUi) return;
-  document.documentElement.dataset.exhlojCoreUi = '2.9.1';
+  document.documentElement.dataset.exhlojCoreUi = '2.9.2';
 
-  const VERSION = '2.9.1';
+  const VERSION = '2.9.2';
   const SETTINGS_KEY = 'exhloj.coreui.settings.v1';
   const CACHE_KEY = 'exhloj.coreui.cache.v1';
   const CAPTCHA_KEY = 'exhloj.local.captcha.history';
@@ -244,14 +244,19 @@
     @media(prefers-color-scheme:dark){#exhloj-title-popup{background:#252e37;color:#e3ebf1;border-color:#4a5866}#exhloj-title-popup button:is(:hover,:focus-visible){background:#354454;color:#e3ebf1}}
     .exhloj-local-medal{font-size:1.25em;vertical-align:middle}
     .exhloj-local-earliest{background-color:rgb(217,240,199)!important}
-    [data-exh-fallback]{position:fixed;right:16px;bottom:18px;z-index:9999}
+    [data-exh-files-in-helper]{display:none!important}
+    #exhloj-contest-files{margin:10px 0 14px}
+    #exhloj-contest-files h3{margin:0 0 4px}
+    #exhloj-contest-files ul{list-style:none;margin:0;padding:0;max-height:15rem;overflow:auto}
+    #exhloj-contest-files li{display:flex;align-items:baseline;gap:12px;max-width:100%;padding:4px 0;border-bottom:1px solid #dce5ee}
+    #exhloj-contest-files a{min-width:0;overflow-wrap:anywhere}
+    #exhloj-contest-files small{margin-inline-start:auto;white-space:nowrap;font-variant-numeric:tabular-nums}
     html.exhloj-local-rounded .section{border-radius:8px!important}
     html.exhloj-local-rounded .section__table-header{border-radius:8px 8px 0 0}
     html.exhloj-local-rounded .contest-sidebar__bg,html.exhloj-local-rounded .profile-header.user-profile-bg{border-radius:8px}
     html.exhloj-local-rounded :is(.search>button,.search>input,.widget--category-filter__tag,button.button,input.textbox,ol.menu.dropdown-target,select.select){border-radius:5px}
     html.exhloj-local-rounded div.dialog__content{border-radius:10px}
     html.exhloj-local-ui :is(.page--contest_scoreboard,.page--homework_scoreboard) .col--user{min-width:15rem}
-    html.exhloj-local-ui .page--homework_detail .col--size{width:100px}
     html.exhloj-local-ui .contest-type--codeforces .contest-type-tag{background:#ffa646}
     .exhloj-captcha-tools{font-size:13px;line-height:1.7;margin:6px 0}
     [data-exhloj-captcha-folded]{display:none!important}
@@ -320,7 +325,7 @@
     body.append(el('p', { class: 'exhloj-panel-summary' }, `当前域：${domainId()} · ${+user()._id > 0 ? '已登录' : '游客'}　　${Object.keys(store.users.oiers).length} 份本地资料 · ${store.ratings.contests.length} 场 Rated 比赛`));
     const cards = el('div', { class: 'exhloj-panel-grid' });
     for (const [title, description, action, module] of [
-      ['比赛助手', '导出题面与提交记录，管理比赛报名。', 'contest-helper', 'contestHelper'],
+      [pageName().startsWith('homework') ? '作业助手' : '比赛助手', '查看附件、导出题面与提交记录，管理报名。', 'contest-helper', 'contestHelper'],
       ['卷王监视器', '汇总练习成绩，查看近期进度。', 'juan-open', 'juanMonitor'],
       ['用户与 Rating', '管理个人资料、OIerDb 绑定和比赛 Rating。', 'user-open', 'userModule'],
       ['题源与难度', '查看原题、洛谷难度、翻译和题解。', 'panel-remote', 'remote'],
@@ -532,10 +537,6 @@
       if (anchor) anchor.after(li); else menu.append(li);
       broadcast('menu.open');
     }
-    if (menu) $('[data-exh-fallback]')?.remove();
-    if (!menu && !$('[data-exh-fallback]')) {
-      const fallback = button('Extend HLOJ', 'settings', { 'data-exh-fallback': '' }); document.body.append(fallback);
-    }
     if (enabled('cleanMenu') && menu) {
       for (const link of $$('a[href]', menu)) {
         if ((link.getAttribute('href') || '').includes('Error: No route found for name:')) link.closest('li')?.remove();
@@ -546,7 +547,7 @@
   }
   function niceSize(value) {
     const size = Number(value);
-    if (!Number.isFinite(size) || size < 0) return '—';
+    if (value == null || value === '' || !Number.isFinite(size) || size < 0) return '—';
     if (size < 1024) return `${size} B`;
     const n = Math.min(3, Math.floor(Math.log(size) / Math.log(1024)));
     return `${(size / 1024 ** n).toFixed(1)} ${['B', 'KiB', 'MiB', 'GiB'][n]}`;
@@ -568,31 +569,11 @@
     const epoch = routeEpoch;
     try {
       let tdoc = current('tdoc');
-      if (!tdoc || !Object.hasOwn(tdoc, 'files')) { await loadPage(); tdoc = current('tdoc'); }
+      if (!tdoc?.title) { await loadPage(); tdoc = current('tdoc'); }
       if (epoch !== routeEpoch || !enabled('homework') || !tdoc) return;
       const heading = $('.medium-9.columns > .section:first-child .section__header h1, .medium-9.columns h1, main h1');
       const title = `${translate('Homework Introduction')} - ${tdoc.title || ''}`;
       if (heading && heading.textContent !== title) heading.textContent = title;
-      if (Array.isArray(tdoc.files) && tdoc.files.length && !$('#exhloj-local-homework-files')) {
-        // 有原生附件表时不再重复插入。
-        if (!$('[data-fragment-id="files"]', mainColumn())) {
-          const section = el('div', { class: 'section visible', id: 'exhloj-local-homework-files' });
-          const header = el('div', { class: 'section__header' }); header.append(el('h1', { class: 'section__title' }, translate('Files')));
-          const body = el('div', { class: 'section__body no-padding files' }), table = el('table', { class: 'data-table' });
-          const head = el('thead'), tr = el('tr');
-          tr.append(el('th', {}, translate('Filename')), el('th', {}, translate('Size'))); head.append(tr); table.append(head);
-          const tbody = el('tbody');
-          for (const file of tdoc.files) {
-            if (!file || typeof file.name !== 'string') continue;
-            const row = el('tr'), name = el('td', { class: 'col--name' });
-            const id = tdoc._id || tdoc.docId;
-            if (!id) continue;
-            const href = `/d/${encodeURIComponent(domainId())}/homework/${encodeURIComponent(id)}/file/${encodeURIComponent(file.name)}`;
-            name.append(el('a', { href }, file.name)); row.append(name, el('td', { class: 'col--size' }, niceSize(file.size))); tbody.append(row);
-          }
-          table.append(tbody); body.append(table); section.append(header, body); mainColumn().append(section);
-        }
-      }
       broadcast('homework_detail.prepare', tdoc);
     } catch (error) { if (epoch === routeEpoch) notify(`作业增强：${error.message}`, true); }
   }
@@ -647,7 +628,7 @@
     const tags = isProblemPage() && $('.problem__tags', column);
     const section = tags && tags.closest('.section');
     const header = (section && $('.section__header', section)) || $$('.section__header', column).find(node =>
-      !node.closest('#exhloj-local-homework-files,#exhloj-local-remote-content') && $('h1,h2,.section__title', node));
+      !node.closest('[data-exh-files-in-helper],#exhloj-local-remote-content') && $('h1,h2,.section__title', node));
     const heading = !header && $$('h1,h2,.section__title', column).find(node => !node.closest('.typo,#exhloj-local-remote-content'));
     return { column, tags, header, heading };
   }
@@ -677,7 +658,7 @@
         if (name !== 'contest_main' && ratedContestPath(target.domain + '/' + target.id, false)) rating.push(['加入 Rating 并结算', 'user-rate-current']);
         groups.push([...rating, ['时间轴结算', 'user-timeline'], ['Rating 记录与命令', 'user-rated']]);
       }
-      if (settings.contestHelper && name !== 'contest_main') groups.push([['比赛助手：导出与报名', 'contest-helper']]);
+      if (settings.contestHelper && name !== 'contest_main') groups.push([[name.startsWith('homework') ? '作业助手' : '比赛助手', 'contest-helper']]);
     }
     return { label, groups: groups.filter(group => group.length), note, view };
   }
@@ -1794,18 +1775,118 @@
     if (!['contest', 'homework'].includes(kind) || !/^(?:[\da-f]{24}|\d+)$/i.test(id)) throw workError('请输入正确的比赛 / 作业 ID');
     return { domain, kind, id, files: form.elements.files.checked, details: form.elements.details.checked };
   }
+  const fileDetailPage = () => /^(contest|homework)_detail$/.test(pageName());
+  const validFileName = name => typeof name === 'string' && !!name && !/[\\\x00-\x1f]/.test(name) && name.split('/').every(part => part && part !== '.' && part !== '..');
+  function nativeFileSections(target) {
+    if (!fileDetailPage()) return [];
+    const base = contestURL(target.domain, target.kind, target.id, '/file/'), groups = [];
+    for (const fragment of $$('.section > .files:is([data-fragment-id="files"],[data-fragment-id="files-public"],[data-fragment-id="files-private"])')) {
+      const section = fragment.parentElement, items = [], rows = $$('tbody tr', fragment);
+      if (!section.closest('main,.main')) continue;
+      for (const row of rows) {
+        const link = $('.col--name a[href]', row), name = row.dataset.filename || link?.textContent.trim();
+        if (!link || !validFileName(name)) continue;
+        let url; try { url = new URL(link.href); } catch { continue; }
+        if (url.origin !== location.origin || !url.pathname.startsWith(base)) continue;
+        const suffix = url.pathname.slice(base.length);
+        const type = suffix.startsWith('private/') ? 'private' : 'public';
+        const tail = suffix.replace(/^(public|private)\//, '');
+        try { if (decodeURIComponent(tail) !== name) continue; } catch { continue; }
+        items.push({ name, type, href: url.href, size: row.dataset.size, sizeText: $('.col--size', row)?.textContent.trim() });
+      }
+      // Only fold a standalone download list. Keep forms, extra links and file-management actions on the site.
+      const downloads = new Set(items.map(item => item.href));
+      const canFold = items.length && items.length === rows.length &&
+        [...section.children].every(child => child === fragment || child.matches('.section__header')) &&
+        !section.closest('form') && !section.querySelector('form,button,select,textarea,input:not([type="checkbox"]),.section__header a,.section__tools') &&
+        $$('a[href]', fragment).every(link => downloads.has(link.href));
+      if (items.length) groups.push({ section, items, canFold });
+    }
+    return groups;
+  }
+  function syncNativeFileSections() {
+    const reachable = settings.contestHelper && ($('#exhloj-title-toggle') || $('.exhloj-local-menu') || typeof GM_registerMenuCommand === 'function');
+    const folded = new Set(reachable && fileDetailPage() ? nativeFileSections(contestContext()).filter(group => group.canFold).map(group => group.section) : []);
+    for (const section of $$('[data-exh-files-in-helper]')) if (!folded.has(section)) section.removeAttribute('data-exh-files-in-helper');
+    for (const section of folded) section.setAttribute('data-exh-files-in-helper', '');
+  }
+  function mountContestFiles(box, form) {
+    const heading = el('h3', { id: 'exhloj-files-heading' }), list = el('ul'), status = el('div', { 'aria-live': 'polite' });
+    box.append(heading, list, status);
+    let generation = 0, inputKey, controller;
+    const epoch = routeEpoch, owner = routeOwner, address = location.href, name = pageName();
+    const active = gen => gen === generation && box.closest('dialog')?.open && routeEpoch === epoch &&
+      location.href === address && String(user()._id || 0) === owner && pageName() === name;
+    function update(onOpen = false) {
+      const key = JSON.stringify(['domain', 'kind', 'tid'].map(key => form.elements[key].value));
+      if (key === inputKey) return;
+      inputKey = key; const gen = ++generation; controller?.abort();
+      const label = form.elements.kind.value === 'homework' ? '作业' : '比赛';
+      heading.textContent = label + '附件'; list.replaceChildren(); status.replaceChildren();
+      let target;
+      try { target = contestInput(); } catch { status.textContent = '填写域和有效的比赛 / 作业 ID 后可查看附件。'; return; }
+      const context = contestContext(), here = /^(contest|homework)_(detail|scoreboard)$/.test(pageName()) &&
+        context.domain === target.domain && context.kind === target.kind && context.id === target.id;
+      const groups = here ? nativeFileSections(target) : [];
+      const matches = doc => doc && (!doc.docId && !doc._id || String(doc.docId || doc._id) === target.id);
+      const local = here && current('tdoc');
+      function draw(doc, availablePrivate) {
+        const files = new Map();
+        const add = item => files.set(item.type + '/' + item.name, item);
+        for (const [type, records] of [['public', doc?.files], ['private', target.kind === 'contest' && availablePrivate]]) {
+          for (const file of Array.isArray(records) ? records : []) if (validFileName(file?.name))
+            add({ name: file.name, size: file.size, type, href: contestURL(target.domain, target.kind, target.id, '/file/' + type + '/' + seg(file.name)) });
+        }
+        // The site's link wins (including its query string). Never read the unfiltered tdoc.privateFiles.
+        for (const group of groups) for (const item of group.items) add(item);
+        list.replaceChildren();
+        for (const file of files.values()) {
+          const li = el('li');
+          li.append(el('a', { href: file.href, download: file.name }, file.name), el('small', {}, file.sizeText || niceSize(file.size)));
+          list.append(li);
+        }
+        heading.textContent = label + '附件' + (files.size ? '（' + files.size + '）' : '');
+        status.textContent = files.size ? '' : '暂无可下载的附件。';
+      }
+      function offer(text, action) {
+        const btn = el('button', { type: 'button', class: 'exhloj-local-button' }, action);
+        btn.addEventListener('click', read); status.replaceChildren(text, btn);
+      }
+      async function read() {
+        if (!active(gen)) return;
+        status.textContent = '正在读取附件…';
+        try {
+          controller = new AbortController();
+          const data = here && fileDetailPage() ? await loadPage() : await requestJSON(contestURL(target.domain, target.kind, target.id), { signal: controller.signal });
+          if (!active(gen)) return;
+          if (!matches(data.tdoc)) throw new Error('未读到这场比赛或作业的信息');
+          draw(data.tdoc, data.files);
+        } catch (error) { if (active(gen)) offer(error.message + ' ', '重试'); }
+      }
+      const known = matches(local) && Array.isArray(local.files);
+      if (known || groups.length) draw(known ? local : null, matches(local) && fileDetailPage() && current('files'));
+      if (known) return;
+      if (here && onOpen) read(); else offer('', '查看附件');
+    }
+    for (const field of ['domain', 'kind', 'tid']) for (const event of ['input', 'change'])
+      form.elements[field].addEventListener(event, () => update());
+    list.addEventListener('click', event => { if (!active(generation)) event.preventDefault(); });
+    box.closest('dialog').addEventListener('close', () => { generation++; controller?.abort(); }, { once: true });
+    update(true);
+  }
   function openContestHelper() {
     if (!settings.contestHelper) throw workError('请先启用 contest-helper');
-    const body = modal('比赛助手', 'contest'), context = contestContext(), form = el('form', { id: 'exhloj-contest-form' });
+    const context = contestContext(), body = modal(context.kind === 'homework' ? '作业助手' : '比赛助手', 'contest'), form = el('form', { id: 'exhloj-contest-form' });
     for (const [name, title, value] of [['domain', '域 ID', context.domain], ['tid', '比赛 / 作业 ID', context.id]]) {
       const label = el('label', {}, title + ' '); label.append(el('input', { type: 'text', name, value, required: true })); form.append(label);
     }
     const kind = el('select', { name: 'kind' }); kind.append(el('option', { value: 'contest' }, '比赛'), el('option', { value: 'homework' }, '作业')); kind.value = context.kind; form.append(kind);
+    const files = el('section', { id: 'exhloj-contest-files', 'aria-labelledby': 'exhloj-files-heading' }); form.append(files);
     for (const [name, title, checked] of [['files', '打包题面引用的附件及公开比赛附件', settings.contestFiles], ['details', '提交导出包含时间 / 内存详情（逐条读取）', settings.contestDetails]]) {
       const label = el('label'), input = el('input', { type: 'checkbox', name }); input.checked = checked; label.append(input, title); form.append(label);
     }
     form.append(button('导出题面 ZIP', 'contest-statements'), button('导出提交 CSV', 'contest-records-csv'), button('导出提交 JSON', 'contest-records-json'), button('导出 Ghost', 'contest-ghost'));
-    body.append(form); workProgress(body, 'contest');
+    body.append(form); mountContestFiles(files, form); workProgress(body, 'contest');
     body.append(el('h3', {}, '报名工具'), button('自动报名设置', 'panel-attend'), el('p', {}, '检查配置范围内尚未结束、未报名的比赛与作业。'));
     body.append(button('检查待报名', 'attend-preview'), el('div', { id: 'exhloj-attend-results' }));
     workProgress(body, 'auto'); showWorkErrors(workStates.contest); showWorkErrors(workStates.auto);
@@ -3513,6 +3594,7 @@
       const accountChanged = owner !== routeOwner;
       route = location.href; routeOwner = owner; routeName = name;
       routeEpoch++; contextBody = {}; pageRequest = undefined;
+      if ($('#exhloj-contest-files')) $('#exhloj-local-dialog')?.close();
       semanticPanel?.controller?.abort();
       if (semanticPanel?.body.isConnected) renderSearchResults(semanticPanel);
       if (accountChanged) for (const job of workJobs.values()) job.controller.abort();
@@ -3522,7 +3604,7 @@
       lastPageError = ''; homeworkStarted = recordStarted = solutionStarted = false;
       clearLocalRemote(); removeTitleTools(); remotePending = false; contestRevealed = false;
       lastEvents.delete('homework_detail.prepare'); lastEvents.delete('record_detail.prepare');
-      for (const id of ['exhloj-local-homework-files', 'exhloj-local-avatar', 'exhloj-local-permissions', 'exhloj-local-origin-code', 'exhloj-local-user-card']) $(`#${id}`)?.remove();
+      for (const id of ['exhloj-local-avatar', 'exhloj-local-permissions', 'exhloj-local-origin-code', 'exhloj-local-user-card']) $(`#${id}`)?.remove();
     }
   }
   function refresh() {
@@ -3548,7 +3630,7 @@
     if (settings.captcha) runCaptcha();
     if (isProblemPage(name)) remoteProblem();
     if (settings.remote && name === 'record_detail') remoteSubmissionTools();
-    syncTitleTools(); configureAutoAttend(); refreshUserModule();
+    syncTitleTools(); syncNativeFileSections(); configureAutoAttend(); refreshUserModule();
     if (settings.ui && name === 'record_detail' && !recordStarted && current('rdoc')) {
       recordStarted = true; broadcast('record_detail.prepare', current('rdoc'));
     }
