@@ -1,8 +1,8 @@
 {
-  "version": "2.9.0",
-  "scriptSha256": "c67a0379a1e066bb269d0dccff243529d76149ec65fef4218697ac642b0f0c91",
+  "version": "2.9.1",
+  "scriptSha256": "91bb4714c5692b8507261f43b3a965ea98210ca4043402272cffe300a8c2ae8b",
   "browser": "153.0.8010.0",
-  "passed": 127,
+  "passed": 128,
   "checks": [
     "core: guest fallback, lazy user menu, deduplication, no automatic writes/requests",
     "core: save UI switch and preserve ports across reinstall/page load",
@@ -20,6 +20,7 @@
     "ui: 71-bit permission value and escaped role strings",
     "core: no context, corrupt storage, failed OJ JSON cause a visible error without request loops",
     "core: event replay, listener-free broadcasts and SPA route refresh",
+    "source tags: QOJ link has readable text and its padded area opens the original from Hydro zero-font tags",
     "title menu: source stays in native tags and opening does not move the statement on desktop or mobile",
     "title menu: late Hydro header and replacement tag list reuse one entry and never attach to the sidebar",
     "title menu: independent editors inherit the legacy switch and keep saved ports across upgrade",
@@ -135,13 +136,13 @@
   "checkedAt": "2026-11-18",
   "node": "v24.22.1",
   "packaging": {
-    "version": "2.9.0",
+    "version": "2.9.1",
     "passed": 5,
     "failures": []
   },
   "session": {
-    "version": "2.9.0",
-    "scriptSha256": "c67a0379a1e066bb269d0dccff243529d76149ec65fef4218697ac642b0f0c91",
+    "version": "2.9.1",
+    "scriptSha256": "91bb4714c5692b8507261f43b3a965ea98210ca4043402272cffe300a8c2ae8b",
     "browser": "153.0.8010.0",
     "fixture": "local HTTP server; real HttpOnly cookies; no live OJ account",
     "passed": 5,
@@ -153,7 +154,7 @@
       "session: late responses cannot cross a route or account change before DOM refresh"
     ]
   },
-  "totalPassedLocally": 137,
+  "totalPassedLocally": 138,
   "liveSiteLoginVerified": false,
   "limitations": [
     "Browser checks used Hydro page fixtures and a loopback HTTP session; no live HLOJ account or Tampermonkey sandbox was used."

@@ -284,10 +284,38 @@ async function openDataPage(page) { await page.locator('[data-exh-fallback]').cl
     assert.deepEqual(await f.page.evaluate(() => window.__clipboard), ['new route']); await f.done();
   });
   const noAuto = { 'exhloj.coreui.settings.v1': JSON.stringify({ remoteAuto: false }) };
-  const titleFixture = '<style>*{box-sizing:border-box}body{font:15px/1.5 system-ui;margin:0;padding:12px;background:#edf1f3;color:#243744}.row{max-width:800px;margin:auto}.section{background:white;overflow:hidden;border-radius:6px}.section__header,.section__body{padding:12px 15px}.section__header h1{font-size:20px;margin:0}.section__tools{position:absolute;right:0}.problem__tags{display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin:0;padding:0;list-style:none}.problem__tags>li:not(#exhloj-local-remote){background:#eef1f3;padding:2px 6px;font-size:13px}#statement{min-height:265px}#native-star{padding:0;border:0;background:none}</style>' +
-    '<section class="section"><div class="section__header"><h1 class="section__title"><button id="native-star" aria-label="收藏">☆</button> A. [QOJ17416] 训练题</h1><div class="section__tools"><a href="#next" id="next">下一题</a></div></div>' +
-    '<div class="section__body"><ul class="problem__tags"><li>远程评测题</li><li>3000ms</li><li>500MiB</li></ul><div id="statement"><h2>题目描述</h2><p>题面正文</p></div></div></section>';
-  const titleContext = { pdoc: { docId: 12, title: '[QOJ17416] 训练题', content: '题面正文', config: {} } };
+  const titleFixture = '<style>*{box-sizing:border-box}body{font:15px/1.5 system-ui;margin:0;padding:12px;background:#edf1f3;color:#243744}.row{max-width:800px;margin:auto}.section{background:white;overflow:hidden;border-radius:6px}.section__header,.section__body{padding:12px 15px}.section__header h1{font-size:20px;margin:0}.section__tools{position:absolute;right:0}.problem__tags{display:flex;flex-wrap:wrap;margin:0!important;padding:0!important;list-style:none!important;font-size:0;word-break:keep-all}.problem__tag-item{display:inline-flex;align-items:center;font-size:14px;line-height:30px!important;min-height:30px;min-width:30px;padding:0 10px!important;margin-left:3px;margin-bottom:5px;background:#eef1f3}#statement{min-height:265px}#native-star{padding:0;border:0;background:none}</style>' +
+    '<section class="section"><div class="section__header"><h1 class="section__title"><button id="native-star" aria-label="收藏">☆</button> E. [QOJ17416] Prefix MEX Equation</h1><div class="section__tools"><a href="#next" id="next">下一题</a></div></div>' +
+    '<div class="section__body"><ul class="problem__tags"><span class="problem__tag-item">传统题</span><span class="problem__tag-item">3000ms</span><span class="problem__tag-item">1024MiB</span></ul><div id="statement"><h2>题目描述</h2><p>题面正文</p></div></div></section>';
+  const titleContext = { pdoc: { docId: 12, title: '[QOJ17416] Prefix MEX Equation', content: '题面正文', config: {} } };
+  await check('source tags: QOJ link has readable text and its padded area opens the original from Hydro zero-font tags', async () => {
+    const f = await fixture('problem_detail', titleFixture, titleContext, { storage: noAuto }), p = f.page;
+    const link = p.getByRole('link', { name: 'QOJ 17416', exact: true }), target = 'https://qoj.ac/problem/17416';
+    async function measureTag(item) {
+      return item.evaluate(node => {
+        const rect = node.getBoundingClientRect(), text = document.createRange(); text.selectNodeContents(node);
+        const native = document.querySelector('.problem__tags > .problem__tag-item');
+        return { font: getComputedStyle(node).fontSize, nativeFont: getComputedStyle(native).fontSize,
+          width: rect.width, height: rect.height, nativeHeight: native.getBoundingClientRect().height, textWidth: text.getBoundingClientRect().width,
+          hit: node.contains(document.elementFromPoint(rect.left + 3, rect.top + rect.height / 2)) };
+      });
+    }
+    for (const width of [960, 320]) {
+      await p.setViewportSize({ width, height: 600 });
+      assert.equal(await p.locator('.problem__tags').evaluate(n => getComputedStyle(n).fontSize), '0px');
+      const m = await measureTag(link); assert.equal(m.font, m.nativeFont, JSON.stringify(m));
+      assert.ok(m.height >= m.nativeHeight && m.textWidth >= 45 && m.width >= m.textWidth + 12 && m.hit, JSON.stringify(m));
+      assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    }
+    await p.context().route(target, route => route.fulfill({ contentType: 'text/html', body: 'QOJ 17416' }));
+    const pending = p.context().waitForEvent('page'); await link.click({ position: { x: 3, y: 14 } });
+    const opened = await pending; await opened.waitForURL(target); await opened.close();
+    assert.equal(await p.locator('#exhloj-title-popup').count(), 0); await f.done();
+    const local = await fixture('problem_detail', titleFixture, { pdoc: { ...titleContext.pdoc, title: '本地练习' } });
+    const search = local.page.getByRole('button', { name: '查找原题', exact: true });
+    const m = await measureTag(search); assert.equal(m.font, m.nativeFont); assert.ok(m.height >= m.nativeHeight && m.hit);
+    await search.click({ position: { x: 3, y: 14 } }); await local.page.locator('#exhloj-search-query').waitFor(); await local.done();
+  });
   await check('title menu: source stays in native tags and opening does not move the statement on desktop or mobile', async () => {
     const f = await fixture('problem_detail', titleFixture, titleContext, { storage: noAuto }), p = f.page;
     for (const width of [960, 320]) {
