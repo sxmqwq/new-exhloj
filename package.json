@@ -1,6 +1,6 @@
 {
   "name": "extend-hloj-local",
-  "version": "2.9.1",
+  "version": "2.9.2",
   "description": "HLOJ 训练助手：题源、比赛、练习统计、用户资料和 Rating",
   "private": true,
   "engines": {

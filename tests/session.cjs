@@ -8,12 +8,15 @@ const assert = require('node:assert/strict');
 const root = path.resolve(__dirname, '..');
 const script = fs.readFileSync(path.join(root, 'dist/exhloj.user.js'), 'utf8');
 const checks = [], requests = [], faults = new Map();
+const homeworkPath = '/d/test/homework/12', pdfName = '20261118-pre.pdf', pdfRoute = homeworkPath + '/file/public/' + pdfName;
+const pdf = Buffer.from('%PDF-1.4\nfixture\n%%EOF\n');
 let browser, origin, failure, activeCheck;
 const json = (res, status, value) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(value)); };
 function pageHTML(url, loggedIn) {
   const account = url.pathname === '/home/account';
-  const name = account ? 'home_account' : 'problem_detail';
+  const name = account ? 'home_account' : url.pathname === homeworkPath ? 'homework_detail' : 'problem_detail';
   const context = { UserContext: { _id: loggedIn ? 42 : 0 }, UiContext: { domain: { _id: 'test' } } };
+  if (name === 'homework_detail') context.UiContext.tdoc = { docId: '12', title: '作业', files: [{ name: pdfName, size: pdf.length }] };
   return `<!doctype html><html data-page="${name}"><head><meta charset="utf-8"><link rel="icon" href="data:,"></head><body>
     <nav><a id="normal" href="/d/test/p/2">Normal navigation</a>
       <a id="pjax" data-site-route href="/d/test/p/3">PJAX navigation</a></nav>
@@ -48,6 +51,10 @@ const server = http.createServer(async (req, res) => {
     return res.end('<!doctype html><html><head><link rel="icon" href="data:,"></head><body><form method="post"><button>Sign in to fixture</button></form></body></html>');
   }
   const loggedIn = (req.headers.cookie || '').split('; ').includes('exhloj_test_session=fixture-only');
+  if (url.pathname === pdfRoute) {
+    if (!loggedIn) return json(res, 403, { error: 'Session required' });
+    res.writeHead(200, { 'Content-Type': 'application/pdf', 'Content-Disposition': 'attachment; filename="' + pdfName + '"' }); return res.end(pdf);
+  }
   if (wantsJSON) {
     const fault = faults.get(url.pathname);
     if (fault?.gate) await fault.gate;
@@ -68,7 +75,7 @@ async function fixture() {
     const store = { 'exhloj.coreui.settings.v1': settings };
     window.GM_getValue = (key, fallback) => store[key] ?? fallback;
     window.GM_setValue = (key, value) => { store[key] = value; };
-    window.GM_registerMenuCommand = () => {};
+    window.__menus = {}; window.GM_registerMenuCommand = (name, callback) => { window.__menus[name] = callback; };
     window.GM_xmlhttpRequest = () => { throw new Error('Unexpected cross-site request'); };
     window.__clipboard = [];
     Object.defineProperty(navigator, 'clipboard', { value: { writeText: async text => window.__clipboard.push(text) }, configurable: true });
@@ -108,11 +115,23 @@ async function check(name, fn) {
     const f = await fixture();
     try {
       await copy(f); await copied(f, 'Statement /d/test/p/1');
-      await f.page.locator('[data-exh-fallback]').click(); await f.page.locator('[data-exh-action="close"]').click();
+      await f.page.evaluate(() => window.__menus['Extend HLOJ']()); await f.page.locator('[data-exh-action="close"]').click();
       await Promise.all([f.page.waitForURL(origin + '/d/test/p/2'), f.page.locator('#normal').click()]);
       await copy(f); await copied(f, 'Statement /d/test/p/2');
       await f.page.goto(origin + '/home/account'); await f.page.waitForSelector('#exhloj-local-avatar');
       assert.equal(await f.page.evaluate(() => UserContext._id), 42);
+    } finally { await f.done(); }
+  });
+  await check('session: clicking a homework attachment downloads the authenticated PDF once and leaves the page open', async () => {
+    const f = await fixture();
+    try {
+      await f.page.goto(origin + homeworkPath); await f.page.locator('#exhloj-title-toggle').click();
+      await f.page.getByRole('menuitem', { name: '作业助手' }).click();
+      const file = f.page.getByRole('link', { name: pdfName });
+      assert.equal(await file.getAttribute('href'), pdfRoute); assert.equal(requests.filter(r => r.path === pdfRoute).length, 0);
+      const pending = f.page.waitForEvent('download'); await file.click(); const downloaded = await pending;
+      assert.equal(downloaded.suggestedFilename(), pdfName); assert.deepEqual(fs.readFileSync(await downloaded.path()), pdf);
+      assert.equal(requests.filter(r => r.path === pdfRoute).length, 1); assert.equal(f.page.url(), origin + homeworkPath);
     } finally { await f.done(); }
   });
   await check('session: PJAX and back navigation keep the account and use the new page data', async () => {

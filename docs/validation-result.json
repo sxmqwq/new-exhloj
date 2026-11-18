@@ -1,10 +1,10 @@
 {
-  "version": "2.9.1",
-  "scriptSha256": "91bb4714c5692b8507261f43b3a965ea98210ca4043402272cffe300a8c2ae8b",
+  "version": "2.9.2",
+  "scriptSha256": "49f0f514a4cbbc31e82d356daa35f6a8ef576d4fc0137f06eb741acbabae70cf",
   "browser": "153.0.8010.0",
-  "passed": 128,
+  "passed": 131,
   "checks": [
-    "core: guest fallback, lazy user menu, deduplication, no automatic writes/requests",
+    "core: search stays clickable, userscript command and lazy account menu open the same panel",
     "core: save UI switch and preserve ports across reinstall/page load",
     "panel: a single menu entry replaces old tool links and preserves native account actions",
     "panel: all tools and automatic attendance settings share the same navigable dialog",
@@ -13,7 +13,10 @@
     "core: downloadable backup is valid UTF-8 JSON; unified panel fits desktop and mobile",
     "ui: exact multilingual Markdown and CPH payload, sends only to chosen local endpoint",
     "ui: delayed context and JSON fallback for problem copying",
-    "ui: homework title/files, filename encoding and no duplicate tables",
+    "attachments: homework PDF is inside its helper, direct downloads handle Unicode and zero bytes, mobile fits",
+    "attachments: contest helper keeps native participant download URLs and leaves management controls intact",
+    "attachments: scoreboard reads detail on open, retarget clears old links, a denied read can be retried",
+    "attachments: late replies cannot repopulate a different target or survive a route change",
     "ui: dynamic scoreboard medals and visible earliest record recalculation",
     "ui: solution Markdown by ID, including permission-denied/missing records",
     "ui: avatar only writes on click, URL validation, no unrelated account mutations",
@@ -136,25 +139,26 @@
   "checkedAt": "2026-11-18",
   "node": "v24.22.1",
   "packaging": {
-    "version": "2.9.1",
+    "version": "2.9.2",
     "passed": 5,
     "failures": []
   },
   "session": {
-    "version": "2.9.1",
-    "scriptSha256": "91bb4714c5692b8507261f43b3a965ea98210ca4043402272cffe300a8c2ae8b",
+    "version": "2.9.2",
+    "scriptSha256": "49f0f514a4cbbc31e82d356daa35f6a8ef576d4fc0137f06eb741acbabae70cf",
     "browser": "153.0.8010.0",
     "fixture": "local HTTP server; real HttpOnly cookies; no live OJ account",
-    "passed": 5,
+    "passed": 6,
     "checks": [
       "session: full navigation and plugin controls preserve the HttpOnly session",
+      "session: clicking a homework attachment downloads the authenticated PDF once and leaves the page open",
       "session: PJAX and back navigation keep the account and use the new page data",
       "session: failed page JSON can be retried manually on the same page without polling",
       "session: 401, 403, HTML login responses and redirects do not log out or trigger retry loops",
       "session: late responses cannot cross a route or account change before DOM refresh"
     ]
   },
-  "totalPassedLocally": 138,
+  "totalPassedLocally": 142,
   "liveSiteLoginVerified": false,
   "limitations": [
     "Browser checks used Hydro page fixtures and a loopback HTTP session; no live HLOJ account or Tampermonkey sandbox was used."
