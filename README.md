@@ -1,6 +1,6 @@
 # Extend HLOJ
 
-为 HLOJ / Hydro 提供题源与难度、比赛工具、练习统计、个人资料和 Rating 的浏览器脚本。当前版本 **2.9.0**。
+为 HLOJ / Hydro 提供题源与难度、比赛工具、练习统计、个人资料和 Rating 的浏览器脚本。当前版本 **2.9.1**。
 
 **[安装 / 更新脚本](https://raw.githubusercontent.com/sxmqwq/new-exhloj/main/dist/exhloj.user.js)** · **[下载与更新说明](https://github.com/sxmqwq/new-exhloj/releases/latest)** · [使用指南](docs/INSTALL.zh-CN.txt)
 

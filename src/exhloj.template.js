@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Extend HLOJ
 // @namespace    exhloj-local
-// @version      2.9.0
+// @version      2.9.1
 // @description  HLOJ 训练助手：题源与难度、比赛、练习统计、用户资料和 Rating。
 // @homepageURL  https://github.com/sxmqwq/new-exhloj
 // @supportURL   https://github.com/sxmqwq/new-exhloj/issues
@@ -54,9 +54,9 @@
   if (!(location.hostname === 'oj.hailiangedu.com' ||
       location.host === 'www.nfls.com.cn:10611' || /(^|\.)oifha\.com$/.test(location.hostname))) return;
   if (document.documentElement.dataset.exhlojCoreUi) return;
-  document.documentElement.dataset.exhlojCoreUi = '2.9.0';
+  document.documentElement.dataset.exhlojCoreUi = '2.9.1';
 
-  const VERSION = '2.9.0';
+  const VERSION = '2.9.1';
   const SETTINGS_KEY = 'exhloj.coreui.settings.v1';
   const CACHE_KEY = 'exhloj.coreui.cache.v1';
   const CAPTCHA_KEY = 'exhloj.local.captcha.history';
@@ -233,9 +233,11 @@
     #exhloj-title-popup button:is(:hover,:focus-visible){background:#edf4f9;color:#185b94}
     #exhloj-title-popup [role=separator]{margin:4px 5px;border-top:1px solid #dce4ea}
     #exhloj-title-popup .exhloj-remote-status{padding:4px 10px}
-    #exhloj-local-remote{display:inline-flex;gap:4px;align-items:center;flex-wrap:wrap;vertical-align:middle;max-width:100%;list-style:none}
+    /* Hydro's .problem__tags has font-size:0; restore the native tag size for the entire source group. */
+    #exhloj-local-remote{display:inline-flex;align-self:flex-start;gap:4px;align-items:center;flex-wrap:wrap;vertical-align:middle;max-width:100%;list-style:none;font-size:14px;line-height:1.4}
+    .problem__tags>#exhloj-local-remote{margin-inline-start:3px}
     #exhloj-local-remote:empty{display:none}
-    #exhloj-local-remote :is(a,button,.exhloj-remote-chip){margin:0;padding:2px 7px;border:0;border-radius:4px;background:#eff4f8;color:#245173;font:inherit;line-height:1.4;text-decoration:none}
+    #exhloj-local-remote :is(a,button,.exhloj-remote-chip){display:inline-flex;align-items:center;box-sizing:border-box;min-height:30px;max-width:100%;margin:0;padding:0 10px;border:0;border-radius:4px;background:#eff4f8;color:#245173;font:inherit;overflow-wrap:anywhere;text-decoration:none}
     #exhloj-local-remote :is(a,button):hover{text-decoration:underline;cursor:pointer}
     #exhloj-local-settings [hidden]{display:none!important}
     @media(pointer:coarse){#exhloj-title-toggle,#exhloj-title-popup button{min-height:40px}}
