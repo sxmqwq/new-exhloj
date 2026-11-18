@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Extend HLOJ
 // @namespace    exhloj-local
-// @version      2.8.0
+// @version      2.9.0
 // @description  HLOJ 训练助手：题源与难度、比赛、练习统计、用户资料和 Rating。
 // @homepageURL  https://github.com/sxmqwq/new-exhloj
 // @supportURL   https://github.com/sxmqwq/new-exhloj/issues
@@ -54,9 +54,9 @@
   if (!(location.hostname === 'oj.hailiangedu.com' ||
       location.host === 'www.nfls.com.cn:10611' || /(^|\.)oifha\.com$/.test(location.hostname))) return;
   if (document.documentElement.dataset.exhlojCoreUi) return;
-  document.documentElement.dataset.exhlojCoreUi = '2.8.0';
+  document.documentElement.dataset.exhlojCoreUi = '2.9.0';
 
-  const VERSION = '2.8.0';
+  const VERSION = '2.9.0';
   const SETTINGS_KEY = 'exhloj.coreui.settings.v1';
   const CACHE_KEY = 'exhloj.coreui.cache.v1';
   const CAPTCHA_KEY = 'exhloj.local.captcha.history';
@@ -67,7 +67,7 @@
   const OPTIONS = {
     rounded: ['卡片圆角与布局', true], homework: ['作业标题与附件', true],
     scoreboard: ['榜单奖牌、标题链接与最早提交标记', true],
-    markdown: ['复制题面 / 题解 Markdown', true], cph: ['发送样例到 CPH / CP Editor', true],
+    markdown: ['复制题面 / 题解 Markdown', true], cph: ['发送到 CPH', true], editor: ['发送到 CP Editor', true],
     avatar: ['头像链接设置入口', true], permissions: ['查看用户权限', true],
     cleanMenu: ['隐藏失效菜单链接', true],
   };
@@ -120,6 +120,8 @@
     for (const key of Object.keys(OPTIONS)) {
       if (typeof value.options?.[key] === 'boolean') result.options[key] = value.options[key];
     }
+    // 旧版本只有一个开关；升级和导入旧备份时保留两个入口原有的状态。
+    if (typeof value.options?.cph === 'boolean' && value.options.editor === undefined) result.options.editor = value.options.cph;
     for (const key of ['cphPort', 'editorPort']) {
       if (value[key] === undefined) continue;
       if (!Number.isInteger(value[key]) || value[key] < 1 || value[key] > 65535) {
@@ -218,7 +220,26 @@
     #exhloj-local-dialog .exhloj-local-button{border:1px solid #cbd6e1;border-radius:6px;background:#f5f8fb;color:#263445;font:inherit}
     #exhloj-local-dialog .exhloj-local-button:hover{border-color:#6c9ec9;background:#edf4fb}
     #exhloj-local-dialog .exhloj-local-button:disabled{opacity:.5;cursor:default}
-    .exhloj-local-toolbar{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin:10px 0}
+    .exhloj-title-host{display:flex;align-items:center;gap:.45rem;flex-wrap:wrap}
+    .exhloj-title-host>.section__title,.exhloj-title-host>h1,.exhloj-title-host>h2{flex:1 1 8rem;min-width:0;overflow-wrap:anywhere}
+    .exhloj-title-host>.section__tools{position:static;inset:auto;transform:none;margin:0;max-width:100%;min-width:0}
+    @media(max-width:640px){.exhloj-title-host>:is(.section__title,h1,h2){flex-basis:0}.exhloj-title-host>.section__tools{order:1;flex:1 1 100%}}
+    #exhloj-title-toggle{flex:none;align-self:center;margin-inline-start:auto;padding:3px 9px;min-height:28px;white-space:nowrap;font:inherit;font-size:13px;line-height:1.4;color:#245b82;background:#eef4f8;border:1px solid #d8e2e8;border-radius:4px;cursor:pointer}
+    #exhloj-title-toggle:after{content:'▾';margin-inline-start:5px}
+    #exhloj-title-toggle[aria-expanded=true]:after{content:'▴'}
+    #exhloj-title-toggle.exhloj-title-fallback{float:right;margin:0 0 0 6px}
+    #exhloj-title-popup{position:fixed;z-index:99999;box-sizing:border-box;width:max-content;min-width:min(170px,calc(100vw - 16px));max-width:min(285px,calc(100vw - 16px));overflow:auto;overscroll-behavior:contain;margin:0;padding:4px;background:#fff;color:#263445;border:1px solid #d8e2e8;border-radius:6px;box-shadow:0 5px 16px #162a4129;font-size:14px;line-height:1.5}
+    #exhloj-title-popup button{display:block;box-sizing:border-box;width:100%;margin:0;padding:6px 10px;text-align:start;background:transparent;color:inherit;line-height:inherit;font:inherit;border:0;border-radius:3px;cursor:pointer}
+    #exhloj-title-popup button:is(:hover,:focus-visible){background:#edf4f9;color:#185b94}
+    #exhloj-title-popup [role=separator]{margin:4px 5px;border-top:1px solid #dce4ea}
+    #exhloj-title-popup .exhloj-remote-status{padding:4px 10px}
+    #exhloj-local-remote{display:inline-flex;gap:4px;align-items:center;flex-wrap:wrap;vertical-align:middle;max-width:100%;list-style:none}
+    #exhloj-local-remote:empty{display:none}
+    #exhloj-local-remote :is(a,button,.exhloj-remote-chip){margin:0;padding:2px 7px;border:0;border-radius:4px;background:#eff4f8;color:#245173;font:inherit;line-height:1.4;text-decoration:none}
+    #exhloj-local-remote :is(a,button):hover{text-decoration:underline;cursor:pointer}
+    #exhloj-local-settings [hidden]{display:none!important}
+    @media(pointer:coarse){#exhloj-title-toggle,#exhloj-title-popup button{min-height:40px}}
+    @media(prefers-color-scheme:dark){#exhloj-title-popup{background:#252e37;color:#e3ebf1;border-color:#4a5866}#exhloj-title-popup button:is(:hover,:focus-visible){background:#354454;color:#e3ebf1}}
     .exhloj-local-medal{font-size:1.25em;vertical-align:middle}
     .exhloj-local-earliest{background-color:rgb(217,240,199)!important}
     [data-exh-fallback]{position:fixed;right:16px;bottom:18px;z-index:9999}
@@ -360,7 +381,7 @@
     settings = nextSettings;
     refresh();
   }
-  function openSettings(attendance = false) {
+  function openSettings(focus = '') {
     const body = modal('设置', 'settings');
     body.append(el('h3', {}, '界面与功能'));
     const form = el('form', { id: 'exhloj-local-settings' });
@@ -368,14 +389,19 @@
     const moduleInput = el('input', { type: 'checkbox', name: 'ui' }); moduleInput.checked = settings.ui;
     moduleLabel.append(moduleInput, '界面增强'); form.append(moduleLabel);
     for (const [key, [text]] of Object.entries(OPTIONS)) {
+      if (key === 'cph' || key === 'editor') continue;
       const label = el('label'), input = el('input', { type: 'checkbox', name: key });
       input.checked = settings.options[key]; label.append(input, text); form.append(label);
     }
-    for (const [key, text] of [['cphPort', 'CPH 端口'], ['editorPort', 'CP Editor 端口']]) {
-      const label = el('label');
-      label.append(text + ' ', el('input', { type: 'number', min: 1, max: 65535, name: key, value: settings[key], required: true }));
-      form.append(label);
+    const editors = el('fieldset', { id: 'exhloj-editor-options' }); editors.append(el('legend', {}, '发送到编辑器'));
+    for (const key of ['cph', 'editor']) {
+      const portKey = key + 'Port', toggle = el('input', { type: 'checkbox', name: key }), label = el('label');
+      const port = el('input', { type: 'number', min: 1, max: 65535, name: portKey, value: settings[portKey], required: true });
+      const portLabel = el('label', {}, (key === 'cph' ? 'CPH' : 'CP Editor') + ' 端口 '); portLabel.append(port);
+      toggle.checked = settings.options[key]; label.append(toggle, OPTIONS[key][0]); editors.append(label, portLabel);
+      const reveal = () => { portLabel.hidden = port.disabled = !toggle.checked; }; reveal(); toggle.addEventListener('change', reveal);
     }
+    form.append(editors);
     for (const [key, text] of [['captcha', '验证码识别'], ['captchaHide', '识别成功后折叠验证码'],
       ['captchaRemember', '识别成功后勾选“记住我”'], ['remote', '题源与题解'],
       ['remoteAuto', '自动读取已识别题目的难度（缓存 24 小时）'],
@@ -390,7 +416,7 @@
       for (const [value, title] of choices) select.append(el('option', { value }, title));
       select.value = settings[key]; label.append(select); form.append(label);
     }
-    const advanced = el('details', { id: 'exhloj-attend-options' }); advanced.open = attendance;
+    const advanced = el('details', { id: 'exhloj-attend-options' }); advanced.open = focus === 'attendance';
     advanced.append(el('summary', {}, '自动报名与请求参数'));
     for (const [key, title, min, max] of [['helperDelay', '请求间隔（毫秒）', 100, 5000], ['helperPageLimit', '每类列表最多页数', 1, 1000], ['helperRequestLimit', '单次任务最多请求数', 10, 10000], ['autoAttendInterval', '自动报名检查间隔（秒）', 10, 86400]]) {
       const label = el('label', {}, title + ' '); label.append(el('input', { type: 'number', name: key, value: settings[key], min, max, required: true })); advanced.append(label);
@@ -406,7 +432,8 @@
     advanced.append(el('p', {}, '保存后保持 OJ 登录，并开着一个 OJ 页面，自动报名才会运行。'));
     form.append(advanced, button('保存设置', 'save-settings'), button('刷新页面', 'reload'));
     body.append(form, button('验证码识别记录', 'captcha-history'));
-    if (attendance) advanced.scrollIntoView({ block: 'start' });
+    if (focus === 'attendance') advanced.scrollIntoView({ block: 'start' });
+    if (focus === 'editors') form.elements.cph.focus();
   }
   function openDataTools() {
     const body = modal('数据与备份', 'data');
@@ -609,16 +636,137 @@
     }
   }
 
-  function problemToolbar() {
-    if ($('#exhloj-local-problem-tools')) return;
-    const target = $('div.section__body > ul.problem__tags:first-child, .problem__tags');
-    const container = target?.parentElement || mainColumn();
-    if (!container) return;
-    const tools = el('div', { id: 'exhloj-local-problem-tools', class: 'exhloj-local-toolbar' });
-    if (enabled('markdown')) tools.append(button('复制题面 Markdown', 'problem-copy'));
-    if (enabled('cph')) tools.append(button('发送到 CPH', 'cph'), button('发送到 CP Editor', 'editor'));
-    if (tools.children.length) { if (target) target.after(tools); else container.prepend(tools); }
+  const isProblemPage = (name = pageName()) => name === 'problem_detail' || name.endsWith('detail_problem');
+  const hiddenContestSource = () => pageName() === 'contest_detail_problem' &&
+    (settings.remoteContest === 'hide' || (settings.remoteContest === 'shortcut' && !contestRevealed));
+  function titleLocation() {
+    const column = $('.main .medium-9.columns') || $('.main .medium-12.columns') || $('.medium-9.columns') || $('main') || $('.main');
+    if (!column) return {};
+    const tags = isProblemPage() && $('.problem__tags', column);
+    const section = tags && tags.closest('.section');
+    const header = (section && $('.section__header', section)) || $$('.section__header', column).find(node =>
+      !node.closest('#exhloj-local-homework-files,#exhloj-local-remote-content') && $('h1,h2,.section__title', node));
+    const heading = !header && $$('h1,h2,.section__title', column).find(node => !node.closest('.typo,#exhloj-local-remote-content'));
+    return { column, tags, header, heading };
   }
+  function remoteActions(state) {
+    const items = [], origin = state?.origin;
+    if (origin?.luoguId || origin?.type === 'codeforces') items.push(['读取 / 刷新难度', 'remote-meta']);
+    if (origin?.luoguId) items.push([state.showStatement ? '收起题面 / 翻译' : '题面 / 翻译', 'remote-statement'],
+      [state.showSolutions ? '收起洛谷题解' : '查看洛谷题解', 'remote-solutions'], ['导出已加载内容', 'remote-export']);
+    return items;
+  }
+  function titleModel() {
+    const groups = [], name = pageName(); let label, note = '', view = '';
+    if (isProblemPage(name)) {
+      label = '题目工具';
+      const local = [['markdown', '复制题面 Markdown', 'problem-copy'], ['cph', '发送到 CPH', 'cph'], ['editor', '发送到 CP Editor', 'editor']];
+      groups.push(local.filter(([key]) => enabled(key)).map(([, ...item]) => item));
+      if (settings.remote && !hiddenContestSource() && remoteState) {
+        view = remoteState.id;
+        groups.push([...remoteActions(remoteState), ['按题意搜索原题', 'remote-search'], ['配置题源', 'remote-config']]);
+        note = remoteState.origin?.type === 'none' ? '已停用此题的自动题源识别' : remoteState.messages.join('；');
+      } else if (settings.remote && hiddenContestSource() && settings.remoteContest === 'shortcut') note = '按 Ctrl+Q 显示比赛题源';
+      if (settings.ui && groups.some(group => group.length)) groups.push([['编辑器设置', 'editor-settings']]);
+    } else if (['contest_main', 'contest_detail', 'contest_scoreboard', 'homework_detail', 'homework_scoreboard'].includes(name)) {
+      label = name.startsWith('homework') ? '作业工具' : '比赛工具';
+      if (settings.userModule && name.startsWith('contest')) {
+        const rating = [], target = contestContext();
+        if (name !== 'contest_main' && ratedContestPath(target.domain + '/' + target.id, false)) rating.push(['加入 Rating 并结算', 'user-rate-current']);
+        groups.push([...rating, ['时间轴结算', 'user-timeline'], ['Rating 记录与命令', 'user-rated']]);
+      }
+      if (settings.contestHelper && name !== 'contest_main') groups.push([['比赛助手：导出与报名', 'contest-helper']]);
+    }
+    return { label, groups: groups.filter(group => group.length), note, view };
+  }
+  let titleTrigger, titlePopup, titleHost, titleSignature;
+  function closeTitleMenu(restore = false) {
+    if (!titlePopup) return;
+    titlePopup.remove(); titlePopup = undefined; titleSignature = '';
+    titleTrigger?.setAttribute('aria-expanded', 'false'); titleTrigger?.removeAttribute('aria-controls');
+    if (restore) titleTrigger?.focus({ preventScroll: true });
+  }
+  function removeTitleTools() {
+    closeTitleMenu(); titleTrigger?.remove(); titleTrigger = undefined;
+    titleHost?.classList.remove('exhloj-title-host'); titleHost = undefined;
+  }
+  function positionTitleMenu() {
+    if (!titlePopup) return;
+    const a = titleTrigger.getBoundingClientRect(), w = document.documentElement.clientWidth, h = window.innerHeight, pad = 6;
+    if (!titleTrigger.isConnected || a.bottom < 0 || a.top > h) { closeTitleMenu(); return; }
+    const below = h - a.bottom - pad * 2, above = a.top - pad * 2;
+    const flip = below < titlePopup.scrollHeight + 2 && above > below;
+    titlePopup.style.maxHeight = Math.max(40, flip ? above : below) + 'px';
+    titlePopup.style.left = Math.max(pad, Math.min(w - titlePopup.offsetWidth - pad, a.right - titlePopup.offsetWidth)) + 'px';
+    titlePopup.style.top = Math.max(pad, flip ? a.top - pad - titlePopup.offsetHeight : a.bottom + pad) + 'px';
+  }
+  function paintTitleMenu(model) {
+    if (!titlePopup) return;
+    const signature = JSON.stringify(model);
+    if (signature !== titleSignature) {
+      const focus = titlePopup.contains(document.activeElement) && document.activeElement.dataset.exhAction;
+      const fragment = document.createDocumentFragment();
+      model.groups.forEach((group, index) => {
+        if (index) fragment.append(el('div', { role: 'separator' }));
+        for (const [text, action] of group) fragment.append(el('button', { type: 'button', role: 'menuitem', tabindex: '-1',
+          'data-exh-action': action, ...(model.view && action.startsWith('remote-') ? { 'data-remote-view': model.view } : {}) }, text));
+      });
+      if (model.note) fragment.append(el('div', { class: 'exhloj-remote-status', role: 'status' }, model.note));
+      titlePopup.replaceChildren(fragment); titleSignature = signature;
+      if (focus) ($$('button', titlePopup).find(node => node.dataset.exhAction === focus) || $('button', titlePopup))?.focus({ preventScroll: true });
+    }
+    positionTitleMenu();
+  }
+  function showTitleMenu(last = false) {
+    syncPageContext(); syncTitleTools();
+    if (!titleTrigger?.isConnected) return;
+    if (!titlePopup) {
+      titlePopup = el('div', { id: 'exhloj-title-popup', role: 'menu', 'aria-labelledby': 'exhloj-title-toggle' });
+      document.body.append(titlePopup); titleTrigger.setAttribute('aria-controls', titlePopup.id); titleTrigger.setAttribute('aria-expanded', 'true');
+    }
+    paintTitleMenu(titleModel());
+    if (titlePopup) $$('button', titlePopup).at(last ? -1 : 0)?.focus({ preventScroll: true });
+  }
+  function syncTitleTools() {
+    const model = titleModel();
+    if (!model.groups.length) { removeTitleTools(); return; }
+    const { column, header, heading } = titleLocation();
+    if (!column) { removeTitleTools(); return; }
+    if (!titleTrigger) {
+      titleTrigger = el('button', { type: 'button', id: 'exhloj-title-toggle', 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
+      titleTrigger.addEventListener('click', () => titlePopup ? closeTitleMenu(true) : showTitleMenu());
+    }
+    if (titleTrigger.textContent !== model.label) titleTrigger.textContent = model.label;
+    if (titleHost !== header) { titleHost?.classList.remove('exhloj-title-host'); titleHost = header; }
+    titleTrigger.classList.toggle('exhloj-title-fallback', !header);
+    if (header) {
+      header.classList.add('exhloj-title-host');
+      if (titleTrigger.parentNode !== header) header.append(titleTrigger);
+    } else if (!titleTrigger.isConnected || titleTrigger.parentNode !== (heading?.parentNode || column)) {
+      if (heading) heading.before(titleTrigger); else column.prepend(titleTrigger);
+    }
+    paintTitleMenu(model);
+  }
+  document.addEventListener('pointerdown', event => {
+    if (titlePopup && !titlePopup.contains(event.target) && !titleTrigger.contains(event.target)) closeTitleMenu();
+  }, true);
+  document.addEventListener('focusin', event => {
+    if (titlePopup && !titlePopup.contains(event.target) && event.target !== titleTrigger) closeTitleMenu();
+  });
+  document.addEventListener('keydown', event => {
+    if (event.target === titleTrigger && ['ArrowDown', 'ArrowUp'].includes(event.key)) {
+      event.preventDefault(); showTitleMenu(event.key === 'ArrowUp'); return;
+    }
+    if (!titlePopup) return;
+    if (event.key === 'Escape') { event.preventDefault(); closeTitleMenu(true); return; }
+    if (!titlePopup.contains(event.target)) return;
+    if (event.key === 'Tab') { closeTitleMenu(true); return; }
+    const nodes = $$('button', titlePopup), index = nodes.indexOf(document.activeElement);
+    const next = { ArrowDown: (index + 1) % nodes.length, ArrowUp: (index + nodes.length - 1) % nodes.length, Home: 0, End: nodes.length - 1 }[event.key];
+    if (next !== undefined) { event.preventDefault(); nodes[next]?.focus({ preventScroll: true }); }
+  });
+  window.addEventListener('resize', positionTitleMenu);
+  document.addEventListener('scroll', event => { if (titlePopup && event.target !== titlePopup) positionTitleMenu(); }, true);
   async function problemDocument(needConfig = false) {
     if (!current('pdoc')?.content || (needConfig && !current('pdoc')?.config)) await loadPage();
     const pdoc = current('pdoc');
@@ -1575,8 +1723,8 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
   }
   function stateFor(control) {
     const id = control.closest('[data-remote-view]')?.dataset.remoteView;
-    const state = remoteViews.get(id);
-    if (!state) throw new Error('工具面板已过期，请重新打开');
+    const state = remoteState?.id === id ? remoteState : remoteViews.get(id);
+    if (!state || (state.local && state !== remoteState)) throw new Error('工具面板已过期，请重新打开');
     return state;
   }
   function renderedMarkdown(text) {
@@ -1594,10 +1742,10 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
     return node;
   }
   function renderRemote(state) {
-    const root = state.root;
-    if (!root?.isConnected) return;
+    let root = state.root;
+    if (!root?.isConnected || (state.local && (state !== remoteState || hiddenContestSource()))) return;
     root.dataset.remoteView = state.id;
-    const tools = el('div', { class: 'exhloj-remote-tools' });
+    const tools = state.local ? document.createDocumentFragment() : el('div', { class: 'exhloj-remote-tools' });
     for (const link of originLinks(state.origin)) tools.append(el('a', { href: link.link, target: '_blank', rel: 'noopener noreferrer' }, link.name));
     const difficulty = luoguDifficulty(state.origin?.difficulty ?? state.problem?.difficulty);
     if (difficulty !== undefined) {
@@ -1607,12 +1755,21 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
       tools.append(chip);
     }
     if (state.rating !== undefined) tools.append(el('span', { class: 'exhloj-remote-chip', 'data-exh-cf-rating': '' }, `CF *${state.rating}`));
-    if (state.origin?.luoguId || cfId(state.origin?.target)) tools.append(button('读取 / 刷新难度', 'remote-meta'));
-    if (state.origin?.luoguId) tools.append(button('题面 / 翻译', 'remote-statement'), button('查看洛谷题解', 'remote-solutions'), button('导出已加载内容', 'remote-export'));
-    if (state.local) tools.append(button('按题意搜索原题', 'remote-search'), button('配置题源', 'remote-config'));
-    if (!state.origin || state.origin.type === 'none') tools.append(el('span', {}, state.origin?.type === 'none' ? '已停用此题的自动题源识别' : '未识别题源；可在本机配置'));
-    if (state.messages.length) tools.append(el('div', { class: 'exhloj-remote-status', role: 'status' }, state.messages.join('；')));
-    root.replaceChildren(tools);
+    if (state.local) {
+      if (!state.origin) tools.append(button('查找原题', 'remote-search', { class: 'exhloj-find-source', title: '未识别题源，按题意查找原题' }));
+      root.replaceChildren(tools); state.color = settings.remoteColor;
+      syncTitleTools();
+      let content = $('#exhloj-local-remote-content');
+      if (!state.showStatement && !state.showSolutions) { content?.remove(); return; }
+      if (!content) content = el('div', { id: 'exhloj-local-remote-content' });
+      const anchor = root.closest('.problem__tags') || root;
+      if (content.previousElementSibling !== anchor) anchor.after(content);
+      root = content; root.dataset.remoteView = state.id; root.replaceChildren();
+    } else {
+      for (const [name, action] of remoteActions(state)) tools.append(button(name, action));
+      if (state.messages.length) tools.append(el('div', { class: 'exhloj-remote-status', role: 'status' }, state.messages.join('；')));
+      root.replaceChildren(tools);
+    }
     if (state.showStatement && state.problem) {
       const article = el('section', { class: 'exhloj-remote-article' });
       article.append(button('复制题面 Markdown', 'remote-copy-statement'), renderedMarkdown(state.problem.statement)); root.append(article);
@@ -1641,6 +1798,7 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
       const cf = cfId(state.origin?.luoguId) || (state.origin?.type === 'codeforces' ? state.origin.target : '');
       if (cf) { jobs.push(cfRating(cf, force).then(rating => { state.rating = rating; })); names.push('Codeforces'); }
       const results = await Promise.allSettled(jobs);
+      state.metaError = results.some(result => result.status === 'rejected');
       state.messages = results.flatMap((result, i) => result.status === 'rejected' ? [`${names[i]}：${result.reason.message}`] : []);
       if (!state.messages.length) state.messages = ['原站资料已读取；未评级的题目不显示 rating'];
       renderRemote(state);
@@ -1667,24 +1825,30 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
     state.exhausted = rows.length === 0 || added === 0 || (state.total > 0 && state.solutions.length >= state.total) || state.solutions.length >= 500;
     state.messages = rows.length ? [] : ['原站没有更多题解']; renderRemote(state);
   }
+  function clearLocalRemote() {
+    remoteState = undefined; $('#exhloj-local-remote')?.remove(); $('#exhloj-local-remote-content')?.remove();
+  }
   function remoteProblem() {
-    if (!settings.remote || !mainColumn()) return;
+    const { column, tags, header, heading } = titleLocation();
+    if (!settings.remote || hiddenContestSource() || !column) { clearLocalRemote(); return; }
     if (!current('pdoc')) {
       if (!remotePending) { remotePending = true; const epoch = routeEpoch; loadPage().then(() => { if (epoch === routeEpoch) schedule(); }).catch(() => {}); }
       return;
     }
-    const hidden = pageName() === 'contest_detail_problem' && settings.remoteContest !== 'show' && !contestRevealed;
     let root = $('#exhloj-local-remote');
-    if (hidden) {
-      if (!root) { root = el('div', { id: 'exhloj-local-remote' }, settings.remoteContest === 'shortcut' ? '比赛页题源已隐藏，按 Ctrl+Q 显示' : '比赛页默认隐藏题源'); mainColumn().prepend(root); }
-      return;
-    }
+    const tag = tags && /^(UL|OL)$/.test(tags.tagName) ? 'LI' : 'SPAN';
+    if (root?.tagName !== tag) { root?.remove(); root = el(tag, { id: 'exhloj-local-remote' }); }
+    if (tags) { if (root.parentNode !== tags) tags.append(root); }
+    else if (header || heading) { const anchor = header || heading; if (root.previousElementSibling !== anchor) anchor.after(root); }
+    else if (root.parentNode !== column) column.prepend(root);
     const origin = inferOrigin(), signature = problemKey() + JSON.stringify(origin);
-    if (remoteState?.signature === signature && root?.dataset.remoteView === remoteState.id) return;
-    if (!root) {
-      root = el('div', { id: 'exhloj-local-remote' });
-      const tags = $('#exhloj-local-problem-tools') || $('.problem__tags');
-      if (tags) tags.after(root); else mainColumn().prepend(root);
+    if (remoteState?.signature === signature) {
+      const content = $('#exhloj-local-remote-content');
+      if (remoteState.root !== root || remoteState.color !== settings.remoteColor ||
+          ((remoteState.showStatement || remoteState.showSolutions) && content?.previousElementSibling !== (tags || root))) {
+        remoteState.root = root; renderRemote(remoteState);
+      }
+      return;
     }
     const state = makeRemoteState(origin, true); state.signature = signature; state.root = root; remoteState = state; renderRemote(state);
     if (settings.remoteAuto && origin?.type !== 'none' && (origin?.luoguId || origin?.type === 'codeforces')) loadRemoteMeta(state);
@@ -2240,11 +2404,6 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
     });
   }
   function juanResult() { const result = workStates.juan.result; if (!result) throw workError('请先完成一次统计'); return result; }
-  function contestToolbar() {
-    if (!settings.contestHelper) { $('#exhloj-contest-tools')?.remove(); return; }
-    if (!['contest_detail', 'homework_detail', 'contest_scoreboard', 'homework_scoreboard'].includes(pageName()) || $('#exhloj-contest-tools') || !mainColumn()) return;
-    const tools = el('div', { id: 'exhloj-contest-tools', class: 'exhloj-local-toolbar' }); tools.append(button('比赛助手：导出与报名', 'contest-helper')); mainColumn().prepend(tools);
-  }
 
 
   // user：所有资料编辑和 Rating 结算均在本机完成，不设置指定 UID 的编辑门槛。
@@ -2453,7 +2612,7 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
   function refreshUserModule() {
     if (!settings.userModule) { workJobs.get('user')?.controller.abort(); workJobs.get('oier')?.controller.abort(); }
     try { if (page.UiContext?.exhloj) { if (settings.userModule) page.UiContext.exhloj.user = localUserAPI; else delete page.UiContext.exhloj.user; } } catch {}
-    refreshUserProfile(); refreshUserScoreboards(); refreshUserNames(); ratingToolbar();
+    refreshUserProfile(); refreshUserScoreboards(); refreshUserNames();
   }
   function userToolBody(title) { if (!settings.userModule) throw workError('请先启用用户资料与 Rating'); return modal(title, 'user'); }
   function openUserTools() {
@@ -2942,13 +3101,6 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
   }
   function ratingSummary() {
     const { ratings } = userStore(); return `已保存 ${ratings.contests.length} 场比赛、${ratings.records.length} 条 Rating 记录。`;
-  }
-  function ratingToolbar() {
-    if (!settings.userModule || !['contest_detail', 'contest_scoreboard', 'contest_main'].includes(pageName())) { $('#exhloj-rating-tools')?.remove(); return; }
-    if ($('#exhloj-rating-tools') || !mainColumn()) return;
-    const tools = el('div', { id: 'exhloj-rating-tools', class: 'exhloj-local-toolbar' });
-    if (pageName() !== 'contest_main' && ratedContestPath(`${contestContext().domain}/${contestContext().id}`, false)) tools.append(button('加入 Rating 并结算', 'user-rate-current'));
-    tools.append(button('时间轴结算', 'user-timeline'), button('Rating 记录与命令', 'user-rated')); mainColumn().prepend(tools);
   }
   function ratedCommandTitle(title) { return String(title || '').replace(/[,\r\n]/g, ' ').slice(0, 250); }
   function ratedCommand(id, title, weight = 1, version = 2) {
@@ -3509,6 +3661,11 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
     if (!control) return;
     event.preventDefault();
     const action = control.dataset.exhAction;
+    if (titlePopup?.contains(control) || control.closest('#exhloj-local-remote')) {
+      const epoch = routeEpoch; syncPageContext();
+      if (epoch !== routeEpoch && action !== 'problem-copy') { schedule(); return; }
+      if (titlePopup?.contains(control)) closeTitleMenu(true);
+    }
     if (busyActions.has(action)) return;
     busyActions.add(action);
     task(async () => {
@@ -3518,21 +3675,22 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
         case 'panel-settings': openSettings(); break;
         case 'panel-data': openDataTools(); break;
         case 'panel-remote': openRemoteTools(); break;
-        case 'panel-attend': openSettings(true); break;
+        case 'panel-attend': openSettings('attendance'); break;
+        case 'editor-settings': openSettings('editors'); break;
         case 'close': $('#exhloj-local-dialog')?.close(); break;
         case 'reload': location.reload(); break;
         case 'save-settings': {
           const form = $('#exhloj-local-settings');
           if (!form.reportValidity()) return;
-          const value = { ...settings, ui: form.elements.ui.checked, options: {}, cphPort: +form.elements.cphPort.value, editorPort: +form.elements.editorPort.value };
+          const value = { ...settings, ui: form.elements.ui.checked, options: {} };
+          for (const key of ['cphPort', 'editorPort']) if (!form.elements[key].disabled) value[key] = +form.elements[key].value;
           for (const key of ['captcha', 'remote', 'captchaHide', 'captchaRemember', 'remoteAuto', 'contestHelper', 'juanMonitor', 'autoAttend', 'userModule']) value[key] = form.elements[key].checked;
           for (const key of ['helperDelay', 'helperPageLimit', 'helperRequestLimit', 'autoAttendInterval']) value[key] = +form.elements[key].value;
           for (const key of ['autoAttendTargets', 'autoAttendTitle', 'autoAttendRules']) value[key] = form.elements[key].value;
           value.remoteContest = form.elements.remoteContest.value; value.remoteColor = form.elements.remoteColor.value;
           for (const key of Object.keys(OPTIONS)) value.options[key] = form.elements[key].checked;
           const next = normalizeSettings(value); save(SETTINGS_KEY, next); settings = next;
-          configureAutoAttend();
-          refreshUserModule();
+          refresh();
           notify('设置已保存，刷新页面后完整生效'); break;
         }
         case 'export': download('exhloj-backup.json', JSON.stringify(exportData(), null, 2)); break;
@@ -3547,7 +3705,9 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
         case 'problem-copy': await copyText(markdownContent((await problemDocument()).content)); break;
         case 'solution-copy': await copySolution(control); break;
         case 'cph': case 'editor': {
+          if (!enabled(action)) break;
           const payload = await cphPayload();
+          if (!enabled(action)) break;
           await sendLocal(action === 'cph' ? settings.cphPort : settings.editorPort, payload);
           notify(`已发送到 ${action === 'cph' ? 'CPH' : 'CP Editor'}（${payload.tests.length} 组样例）`); break;
         }
@@ -3596,7 +3756,11 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
           const state = [...$$('input[name="captcha"]')].map(input => captchaStates.get(input)).find(state => state?.tools === control.closest('.exhloj-captcha-tools'));
           if (state) captchaVisible(state, state.collapsed); break;
         }
-        case 'remote-meta': await loadRemoteMeta(stateFor(control), true); break;
+        case 'remote-meta': {
+          const state = stateFor(control); await loadRemoteMeta(state, true);
+          if (state.local && state === remoteState) notify(state.messages.join('；'), state.metaError);
+          break;
+        }
         case 'remote-config': configureOrigin(); break;
         case 'remote-search': openSemanticSearch(); break;
         case 'remote-search-run': await runSemanticSearch(); break;
@@ -3660,7 +3824,7 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
   document.addEventListener('keydown', event => {
     if (settings.remote && settings.remoteContest === 'shortcut' && pageName() === 'contest_detail_problem' && event.ctrlKey && event.key.toLowerCase() === 'q' && !event.target.closest?.('input,textarea,[contenteditable]')) {
       event.preventDefault(); contestRevealed = !contestRevealed;
-      $('#exhloj-local-remote')?.remove(); remoteState = undefined; remoteProblem();
+      clearLocalRemote(); remoteProblem(); syncTitleTools();
     }
   });
 
@@ -3677,9 +3841,9 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
       if (workJobs.get('oier')?.quick) workJobs.get('oier').controller.abort();
       oierQuickQueue = undefined;
       lastPageError = ''; homeworkStarted = recordStarted = solutionStarted = false;
-      remoteState = undefined; remotePending = false; contestRevealed = false;
+      clearLocalRemote(); removeTitleTools(); remotePending = false; contestRevealed = false;
       lastEvents.delete('homework_detail.prepare'); lastEvents.delete('record_detail.prepare');
-      for (const id of ['exhloj-local-problem-tools', 'exhloj-local-homework-files', 'exhloj-local-avatar', 'exhloj-local-permissions', 'exhloj-local-remote', 'exhloj-local-origin-code', 'exhloj-contest-tools', 'exhloj-rating-tools', 'exhloj-local-user-card']) $(`#${id}`)?.remove();
+      for (const id of ['exhloj-local-homework-files', 'exhloj-local-avatar', 'exhloj-local-permissions', 'exhloj-local-origin-code', 'exhloj-local-user-card']) $(`#${id}`)?.remove();
     }
   }
   function refresh() {
@@ -3699,14 +3863,13 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
     const name = pageName();
     if (enabled('homework') && name === 'homework_detail') homework();
     if (enabled('scoreboard') && name.endsWith('scoreboard')) scoreboard();
-    if ((enabled('markdown') || enabled('cph')) && (name === 'problem_detail' || name.endsWith('detail_problem'))) problemToolbar();
     if (enabled('markdown') && name === 'problem_solution') solutionTools();
     if (enabled('avatar') && name === 'home_account') avatarTools();
     if (enabled('permissions') && name === 'user_detail') permissionTools();
     if (settings.captcha) runCaptcha();
-    if (settings.remote && (name === 'problem_detail' || name.endsWith('detail_problem'))) remoteProblem();
+    if (isProblemPage(name)) remoteProblem();
     if (settings.remote && name === 'record_detail') remoteSubmissionTools();
-    contestToolbar(); configureAutoAttend(); refreshUserModule();
+    syncTitleTools(); configureAutoAttend(); refreshUserModule();
     if (settings.ui && name === 'record_detail' && !recordStarted && current('rdoc')) {
       recordStarted = true; broadcast('record_detail.prepare', current('rdoc'));
     }
@@ -3716,7 +3879,7 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
   const observer = new MutationObserver(records => {
     if (records.some(record => {
       const target = record.target.nodeType === Node.ELEMENT_NODE ? record.target : record.target.parentElement;
-      if (target?.closest('#exhloj-local-dialog, #exhloj-local-toast')) return false;
+      if (target?.closest('#exhloj-local-dialog, #exhloj-local-toast, #exhloj-title-popup')) return false;
       // 仅监听 DOM 内容、页面名称和上下文脚本变化，避免自身样式修改形成循环。
       return true;
     })) schedule();

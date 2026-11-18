@@ -36,6 +36,7 @@ function pageHTML(url, loggedIn) {
 }
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, origin || 'http://localhost');
+  if (url.origin !== origin) { res.writeHead(403); return res.end(); }
   const wantsJSON = (req.headers.accept || '').includes('application/json');
   requests.push({ path: url.pathname, method: req.method, json: wantsJSON });
   if (req.method === 'POST' && url.pathname === '/user/login') {
@@ -78,7 +79,7 @@ async function fixture() {
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(origin + '/user/login');
   await Promise.all([page.waitForURL(origin + '/d/test/p/1'), page.getByRole('button', { name: 'Sign in to fixture' }).click()]);
-  await page.waitForSelector('[data-exh-action="problem-copy"]');
+  await page.waitForSelector('#exhloj-title-toggle');
   const cookies = await context.cookies(origin);
   assert.ok(cookies.find(cookie => cookie.name === 'exhloj_test_session')?.httpOnly);
   return { page, context, cookies, async done() {
@@ -90,7 +91,7 @@ async function fixture() {
     } finally { await context.close(); }
   } };
 }
-const copy = async f => { await f.page.locator('[data-exh-action="problem-copy"]').click(); };
+const copy = async f => { await f.page.locator('#exhloj-title-toggle').click(); await f.page.locator('#exhloj-title-popup [data-exh-action="problem-copy"]').click(); };
 const copied = async (f, text) => { await f.page.waitForFunction(text => window.__clipboard.at(-1) === text, text); };
 const apiCount = () => requests.filter(r => r.json).length;
 async function check(name, fn) {
@@ -101,7 +102,8 @@ async function check(name, fn) {
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   origin = `http://oj.hailiangedu.com:${server.address().port}`;
   browser = await chromium.launch({ ...(process.env.EXHLOJ_CHROME ? { executablePath: process.env.EXHLOJ_CHROME } : {}), headless: true,
-    args: ['--no-sandbox', '--no-proxy-server', '--host-resolver-rules=MAP oj.hailiangedu.com 127.0.0.1'] });
+    // Serve the real browser origin over loopback without relying on host/DNS overrides. The fixture never forwards traffic.
+    proxy: { server: 'http://127.0.0.1:' + server.address().port }, args: ['--no-sandbox'] });
   await check('session: full navigation and plugin controls preserve the HttpOnly session', async () => {
     const f = await fixture();
     try {
@@ -164,7 +166,8 @@ async function check(name, fn) {
         assert.deepEqual(await f.page.evaluate(() => window.__clipboard), []);
         faults.clear(); await copy(f); await copied(f, `Statement /d/test/p/${change === 'route' ? 4 : 1}`);
         // A successful cached response also expires before the debounced DOM observer runs.
-        await f.page.waitForSelector('[data-exh-action="problem-copy"]');
+        await f.page.locator('#exhloj-title-toggle').click();
+        await f.page.waitForSelector('#exhloj-title-popup [data-exh-action="problem-copy"]');
         const count = apiCount();
         await f.page.evaluate(change => {
           if (change === 'route') history.replaceState({}, '', '/d/test/p/5');

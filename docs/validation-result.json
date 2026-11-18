@@ -1,8 +1,8 @@
 {
-  "version": "2.8.0",
-  "scriptSha256": "5a48472250d7cd39525a8c37dcffeb19a2f72314c29fcb34431a1c4c82d87f68",
+  "version": "2.9.0",
+  "scriptSha256": "c67a0379a1e066bb269d0dccff243529d76149ec65fef4218697ac642b0f0c91",
   "browser": "153.0.8010.0",
-  "passed": 122,
+  "passed": 127,
   "checks": [
     "core: guest fallback, lazy user menu, deduplication, no automatic writes/requests",
     "core: save UI switch and preserve ports across reinstall/page load",
@@ -20,6 +20,11 @@
     "ui: 71-bit permission value and escaped role strings",
     "core: no context, corrupt storage, failed OJ JSON cause a visible error without request loops",
     "core: event replay, listener-free broadcasts and SPA route refresh",
+    "title menu: source stays in native tags and opening does not move the statement on desktop or mobile",
+    "title menu: late Hydro header and replacement tag list reuse one entry and never attach to the sidebar",
+    "title menu: independent editors inherit the legacy switch and keep saved ports across upgrade",
+    "title menu: scoreboard preserves its native controls, shows Rating first and performs no settlement on open",
+    "title menu: unrecognized source opens search without sending, and hidden contest sources stay hidden in both places",
     "captcha: real SVG auto-fill, fold/show, preserved password and no automatic login",
     "captcha: new unrecognized SVG clears stale auto-fill and keeps manual input visible",
     "captcha: independent module disable leaves challenge unchanged",
@@ -127,40 +132,30 @@
     "oier: quick full pinyin supports polyphonic characters without relying on one initials spelling",
     "oier: quick small candidate choice and expansion survive pagination and fit the dialog"
   ],
-  "checkedAt": "2026-11-11",
+  "checkedAt": "2026-11-18",
   "node": "v24.22.1",
   "packaging": {
-    "version": "2.8.0",
+    "version": "2.9.0",
     "passed": 5,
     "failures": []
   },
   "session": {
-    "version": "2.8.0",
-    "scriptSha256": "5a48472250d7cd39525a8c37dcffeb19a2f72314c29fcb34431a1c4c82d87f68",
+    "version": "2.9.0",
+    "scriptSha256": "c67a0379a1e066bb269d0dccff243529d76149ec65fef4218697ac642b0f0c91",
     "browser": "153.0.8010.0",
     "fixture": "local HTTP server; real HttpOnly cookies; no live OJ account",
-    "passed": 0,
-    "checks": [],
-    "failure": {
-      "check": "session: full navigation and plugin controls preserve the HttpOnly session",
-      "message": "page.goto: net::ERR_EMPTY_RESPONSE at http://oj.hailiangedu.com:46637/user/login\nCall log:\n\u001b[2m  - navigating to \"http://oj.hailiangedu.com:46637/user/login\", waiting until \"load\"\u001b[22m\n"
-    }
+    "passed": 5,
+    "checks": [
+      "session: full navigation and plugin controls preserve the HttpOnly session",
+      "session: PJAX and back navigation keep the account and use the new page data",
+      "session: failed page JSON can be retried manually on the same page without polling",
+      "session: 401, 403, HTML login responses and redirects do not log out or trigger retry loops",
+      "session: late responses cannot cross a route or account change before DOM refresh"
+    ]
   },
-  "totalPassedLocally": 127,
+  "totalPassedLocally": 137,
   "liveSiteLoginVerified": false,
-  "liveSearchProbes": {
-    "query": "Given two integers a and b, output their sum.",
-    "yuantiji": {
-      "status": 200,
-      "candidates": 5
-    },
-    "cpret": {
-      "status": 200,
-      "pageCandidates": 20
-    }
-  },
   "limitations": [
-    "Local HTTP session fixtures returned net::ERR_EMPTY_RESPONSE in this runtime; they must pass in GitHub Actions before merge.",
-    "No live HLOJ account or Tampermonkey sandbox was used."
+    "Browser checks used Hydro page fixtures and a loopback HTTP session; no live HLOJ account or Tampermonkey sandbox was used."
   ]
 }
