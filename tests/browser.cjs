@@ -72,6 +72,12 @@ async function check(name, work) {
   activeCheck = name;
   await work(); checks.push(name); console.log('PASS', name);
 }
+async function openTitleMenu(page) {
+  const popup = page.locator('#exhloj-title-popup');
+  if (!await popup.isVisible()) await page.locator('#exhloj-title-toggle').click();
+  await popup.waitFor(); return popup;
+}
+async function titleAction(page, action) { await (await openTitleMenu(page)).locator('[data-exh-action="' + action + '"]').click(); }
 async function panelTab(page, tab) { await page.locator(`[data-panel-tab="${tab}"]`).click(); }
 async function openSettingsPage(page) { await page.locator('[data-exh-fallback]').click(); await panelTab(page, 'settings'); }
 async function openDataPage(page) { await page.locator('[data-exh-fallback]').click(); await panelTab(page, 'data'); }
@@ -103,7 +109,7 @@ async function openDataPage(page) { await page.locator('[data-exh-fallback]').cl
     await f.page.locator('[data-exh-action="save-settings"]').click();
     const storage = await f.page.evaluate(() => window.__store); await f.done();
     const g = await fixture('problem_detail', '<ul class="problem__tags"></ul>', { pdoc: { content: 'test' } }, { storage });
-    assert.equal(await g.page.locator('#exhloj-local-problem-tools').count(), 0);
+    assert.equal(await (await openTitleMenu(g.page)).locator('[data-exh-action="problem-copy"],[data-exh-action="cph"],[data-exh-action="editor"]').count(), 0);
     assert.equal(await g.page.locator('html.exhloj-local-rounded').count(), 0);
     assert.equal(await g.page.locator('[data-exh-fallback]').count(), 1); await g.done();
   });
@@ -176,25 +182,25 @@ async function openDataPage(page) { await page.locator('[data-exh-fallback]').cl
   await check('ui: exact multilingual Markdown and CPH payload, sends only to chosen local endpoint', async () => {
     const body = '<div class="section__body"><ul class="problem__tags"></ul></div><pre><code class="language-input1">1 &lt; 2\n</code></pre><pre><code class="language-output1">3\n</code></pre>';
     const f = await fixture('problem_detail', body, { domain: { _id: 'test' }, pdoc: { _id: 'problem1', title: 'Title', content: JSON.stringify({ en: 'English', zh: '# 中文\n\n$x&lt;y$' }), config: { timeMax: 2000, memoryMax: 512, subType: 'a', type: 'interactive' } }, tdoc: { _id: 'contest1', title: 'Round', pids: [1, 2, 3] } });
-    await f.page.locator('[data-exh-action="problem-copy"]').click();
+    await titleAction(f.page, 'problem-copy');
     assert.deepEqual(await f.page.evaluate(() => window.__clipboard), ['# 中文\n\n$x&lt;y$']);
-    await f.page.locator('[data-exh-action="cph"]').click();
+    await titleAction(f.page, 'cph');
     let gm = await f.page.evaluate(() => window.__gm);
     assert.equal(gm.length, 1); assert.equal(gm[0].url, 'http://localhost:27121/');
     assert.deepEqual(gm[0].payload.tests, [{ input: '1 < 2\n', output: '3\n' }]);
     assert.equal(gm[0].payload.batch.size, 1); assert.equal(gm[0].payload.interactive, true);
     assert.equal(gm[0].payload.input.fileName, 'a.in');
     assert.equal(gm[0].payload.memoryLimit, 512); assert.equal(gm[0].payload.timeLimit, 2000);
-    await f.page.locator('[data-exh-action="editor"]').click();
+    await titleAction(f.page, 'editor');
     gm = await f.page.evaluate(() => window.__gm); assert.equal(gm.length, 2); assert.equal(gm[1].url, 'http://localhost:10045/');
     assert.equal(f.requests.length, 1); await f.done();
   });
   await check('ui: delayed context and JSON fallback for problem copying', async () => {
     const f = await fixture('problem_detail', '<ul class="problem__tags"></ul>', {}, { json: { pdoc: { title: 'Server', content: '# exact\n', config: {} } } });
-    await f.page.locator('[data-exh-action="problem-copy"]').click();
+    await titleAction(f.page, 'problem-copy');
     await f.page.waitForFunction(() => window.__clipboard.length === 1);
     assert.deepEqual(await f.page.evaluate(() => window.__clipboard), ['# exact\n']);
-    await f.page.locator('[data-exh-action="problem-copy"]').click();
+    await titleAction(f.page, 'problem-copy');
     assert.equal(f.requests.length, 2); assert.equal(f.requests[1].method, 'GET'); await f.done();
   });
   await check('ui: homework title/files, filename encoding and no duplicate tables', async () => {
@@ -250,14 +256,14 @@ async function openDataPage(page) { await page.locator('[data-exh-fallback]').cl
   });
   await check('core: no context, corrupt storage, failed OJ JSON cause a visible error without request loops', async () => {
     const f = await fixture('problem_detail', '<ul class="problem__tags"></ul>', {}, { invalidJSON: true, storage: { 'exhloj.coreui.settings.v1': 'broken JSON' } });
-    await f.page.locator('[data-exh-action="problem-copy"]').click();
+    await titleAction(f.page, 'problem-copy');
     await f.page.waitForFunction(() => document.querySelector('#exhloj-local-toast')?.textContent.includes('JSON'));
     // The explicit click can share the initial remote-module request or retry it after failure.
     const count = f.requests.length; assert.ok(count === 2 || count === 3);
     await f.page.waitForTimeout(1200);
     assert.equal(f.requests.length, count, 'An error must not create background retries');
     const retry = f.page.waitForResponse(response => (response.request().headers().accept || '').includes('application/json'));
-    await f.page.locator('[data-exh-action="problem-copy"]').click(); await retry;
+    await titleAction(f.page, 'problem-copy'); await retry;
     assert.equal(f.requests.length, count + 1, 'A later explicit click must make a fresh attempt'); await f.done();
   });
   await check('core: event replay, listener-free broadcasts and SPA route refresh', async () => {
@@ -273,11 +279,96 @@ async function openDataPage(page) { await page.locator('[data-exh-fallback]').cl
       return value;
     });
     assert.equal(result, 7);
-    await f.page.waitForSelector('[data-exh-action="problem-copy"]');
-    await f.page.locator('[data-exh-action="problem-copy"]').click();
+    await f.page.waitForSelector('#exhloj-title-toggle');
+    await titleAction(f.page, 'problem-copy');
     assert.deepEqual(await f.page.evaluate(() => window.__clipboard), ['new route']); await f.done();
   });
   const noAuto = { 'exhloj.coreui.settings.v1': JSON.stringify({ remoteAuto: false }) };
+  const titleFixture = '<style>*{box-sizing:border-box}body{font:15px/1.5 system-ui;margin:0;padding:12px;background:#edf1f3;color:#243744}.row{max-width:800px;margin:auto}.section{background:white;overflow:hidden;border-radius:6px}.section__header,.section__body{padding:12px 15px}.section__header h1{font-size:20px;margin:0}.section__tools{position:absolute;right:0}.problem__tags{display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin:0;padding:0;list-style:none}.problem__tags>li:not(#exhloj-local-remote){background:#eef1f3;padding:2px 6px;font-size:13px}#statement{min-height:265px}#native-star{padding:0;border:0;background:none}</style>' +
+    '<section class="section"><div class="section__header"><h1 class="section__title"><button id="native-star" aria-label="收藏">☆</button> A. [QOJ17416] 训练题</h1><div class="section__tools"><a href="#next" id="next">下一题</a></div></div>' +
+    '<div class="section__body"><ul class="problem__tags"><li>远程评测题</li><li>3000ms</li><li>500MiB</li></ul><div id="statement"><h2>题目描述</h2><p>题面正文</p></div></div></section>';
+  const titleContext = { pdoc: { docId: 12, title: '[QOJ17416] 训练题', content: '题面正文', config: {} } };
+  await check('title menu: source stays in native tags and opening does not move the statement on desktop or mobile', async () => {
+    const f = await fixture('problem_detail', titleFixture, titleContext, { storage: noAuto }), p = f.page;
+    for (const width of [960, 320]) {
+      await p.setViewportSize({ width, height: 530 });
+      const button = p.locator('.section__header > #exhloj-title-toggle'), statement = p.locator('#statement');
+      assert.equal(await button.innerText(), '题目工具');
+      assert.equal(await p.locator('ul.problem__tags > li#exhloj-local-remote > a').getAttribute('href'), 'https://qoj.ac/problem/17416');
+      assert.equal(await p.locator('[data-exh-action="problem-copy"],.problem__tags button').count(), 0);
+      const y = (await statement.boundingBox()).y, trigger = await button.boundingBox(), heading = await p.locator('h1').boundingBox();
+      assert.ok(trigger.x >= heading.x + heading.width - 1, 'Tools sit to the right of the native title');
+      await button.focus(); await p.keyboard.press('ArrowDown');
+      const popup = p.getByRole('menu', { name: '题目工具' }); await popup.waitFor();
+      assert.equal((await statement.boundingBox()).y, y);
+      assert.equal(await p.locator(':focus').getAttribute('data-exh-action'), 'problem-copy');
+      await p.keyboard.press('End'); assert.equal(await p.locator(':focus').getAttribute('data-exh-action'), 'editor-settings');
+      const bounds = await popup.boundingBox(); assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= width && bounds.y + bounds.height <= 530);
+      assert.equal(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+      if (width === 960) {
+        await p.keyboard.press('Escape'); await button.click();
+        const card = await p.locator('.section').boundingBox();
+        await p.screenshot({ path: 'tests/output/title-menu-desktop.png', clip: { x: card.x, y: card.y, width: card.width, height: Math.ceil(bounds.y + bounds.height - card.y + 12) } });
+      }
+      await p.keyboard.press('Escape'); assert.equal(await p.locator(':focus').getAttribute('id'), 'exhloj-title-toggle');
+      assert.equal(await popup.count(), 0); assert.equal((await statement.boundingBox()).y, y);
+    }
+    await openTitleMenu(p); await p.locator('#native-star').click(); assert.equal(await p.getByRole('menu').count(), 0);
+    assert.equal(await p.locator('#next').getAttribute('href'), '#next'); assert.deepEqual(await p.evaluate(() => window.__gm), []); await f.done();
+  });
+  await check('title menu: late Hydro header and replacement tag list reuse one entry and never attach to the sidebar', async () => {
+    const f = await fixture('problem_detail', '<ul class="problem__tags"></ul>', titleContext, { storage: noAuto }), p = f.page;
+    assert.equal(await p.locator('#exhloj-title-toggle.exhloj-title-fallback').count(), 1);
+    await openTitleMenu(p);
+    await p.evaluate(html => { document.querySelector('.medium-3').innerHTML = '<div class="section__header"><h1>我的信息</h1></div>';
+      document.querySelector('.medium-9').innerHTML = html; window.dispatchEvent(new Event('vjContentNew')); }, titleFixture);
+    await p.waitForSelector('.medium-9 .section__header > #exhloj-title-toggle');
+    assert.equal(await p.locator('#exhloj-title-toggle').count(), 1); assert.equal(await p.locator('.medium-3 button').count(), 0);
+    assert.equal(await p.locator('ul.problem__tags > li a[href="https://qoj.ac/problem/17416"]').count(), 1);
+    await titleAction(p, 'problem-copy'); assert.deepEqual(await p.evaluate(() => window.__clipboard), ['题面正文']); await f.done();
+  });
+  await check('title menu: independent editors inherit the legacy switch and keep saved ports across upgrade', async () => {
+    const key = 'exhloj.coreui.settings.v1', f = await fixture('problem_detail', titleFixture, titleContext, {
+      storage: { [key]: { options: { cph: false }, cphPort: 40001, editorPort: 40002 } } }), p = f.page;
+    let menu = await openTitleMenu(p); assert.equal(await menu.locator('[data-exh-action="editor"],[data-exh-action="cph"]').count(), 0);
+    await titleAction(p, 'editor-settings');
+    assert.equal(await p.locator(':focus').getAttribute('name'), 'cph'); assert.equal(await p.locator('[name="editorPort"]').isVisible(), false);
+    await p.locator('[name="editor"]').check(); assert.equal(await p.locator('[name="editorPort"]').inputValue(), '40002');
+    await p.locator('[data-exh-action="save-settings"]').click(); await p.locator('[data-exh-action="close"]').click();
+    menu = await openTitleMenu(p); assert.equal(await menu.locator('[data-exh-action="cph"]').count(), 0);
+    await titleAction(p, 'editor'); assert.equal(await p.evaluate(() => window.__gm[0].url), 'http://localhost:40002/');
+    await titleAction(p, 'editor-settings'); await p.locator('[name="editor"]').uncheck(); await p.locator('[name="cph"]').check();
+    await p.locator('[data-exh-action="save-settings"]').click();
+    const storage = await p.evaluate(() => window.__store); assert.equal(JSON.parse(storage[key]).editorPort, 40002); await f.done();
+    const g = await fixture('problem_detail', titleFixture, titleContext, { storage }); menu = await openTitleMenu(g.page);
+    assert.equal(await menu.locator('[data-exh-action="editor"]').count(), 0);
+    await titleAction(g.page, 'cph'); assert.equal(await g.page.evaluate(() => window.__gm[0].url), 'http://localhost:40001/'); await g.done();
+  });
+  await check('title menu: scoreboard preserves its native controls, shows Rating first and performs no settlement on open', async () => {
+    const body = '<div class="section"><div class="section__header"><h1 class="section__title">比赛榜单 <a id="csv" href="#export">导出榜单</a></h1><div class="section__tools"><button id="filter">筛选</button></div></div></div>';
+    const f = await fixture('contest_scoreboard', body, { tdoc: { docId: '12' } }, { path: '/d/test/contest/12/scoreboard' });
+    const popup = await openTitleMenu(f.page); assert.equal(await f.page.locator('#exhloj-title-toggle').innerText(), '比赛工具');
+    assert.equal(await popup.getByRole('menuitem').first().getAttribute('data-exh-action'), 'user-rate-current');
+    assert.equal(await popup.locator('[data-exh-action="contest-helper"]').count(), 1);
+    assert.equal(await f.page.locator('#csv').getAttribute('href'), '#export'); await f.page.locator('#filter').click();
+    assert.equal(await popup.count(), 0); assert.equal(f.requests.length, 1); assert.deepEqual(await f.page.evaluate(() => window.__store), {}); await f.done();
+  });
+  await check('title menu: unrecognized source opens search without sending, and hidden contest sources stay hidden in both places', async () => {
+    const local = { pdoc: { docId: 12, title: '练习', content: '题意', config: {} } };
+    const f = await fixture('problem_detail', '<ul class="problem__tags"></ul>', local);
+    await f.page.getByRole('button', { name: '查找原题', exact: true }).click();
+    assert.equal(await f.page.locator('#exhloj-search-query').isVisible(), true);
+    assert.deepEqual(await f.page.evaluate(() => window.__gm), []); await f.done();
+    const g = await fixture('contest_detail_problem', titleFixture, titleContext, {
+      storage: { 'exhloj.coreui.settings.v1': { remoteContest: 'shortcut' } } }), p = g.page;
+    const menu = await openTitleMenu(p);
+    assert.equal(await menu.locator('[data-exh-action^="remote-"]').count(), 0);
+    assert.equal(await p.locator('#exhloj-local-remote').count(), 0);
+    await p.keyboard.press('Control+q'); await menu.locator('[data-exh-action="remote-config"]').waitFor();
+    assert.equal(await p.locator('#exhloj-local-remote a').textContent(), 'QOJ 17416');
+    await p.keyboard.press('Control+q'); assert.equal(await p.locator('#exhloj-local-remote').count(), 0);
+    assert.equal(await menu.locator('[data-exh-action^="remote-"]').count(), 0); assert.deepEqual(await p.evaluate(() => window.__gm), []); await g.done();
+  });
   const remoteBody = '<div class="section__body"><ul class="problem__tags"></ul></div>';
   const originContext = (subType, target) => ({ domain: { _id: 'test' }, pdoc: { docId: 10, title: 'Remote', pid: 'P10', content: 'Statement', config: { type: 'remote_judge', subType, target } } });
   const metaURL = 'https://www.luogu.com.cn/problem/P1001';
@@ -327,7 +418,7 @@ async function openDataPage(page) { await page.locator('[data-exh-fallback]').cl
     }
     const f = await fixture('problem_detail', remoteBody, { pdoc: { docId: 1001, pid: 'P1001', content: 'Local', config: {} } });
     assert.equal(await f.page.locator('#exhloj-local-remote a').count(), 0);
-    assert.match(await f.page.locator('#exhloj-local-remote').innerText(), /未识别/); await f.done();
+    assert.equal(await f.page.locator('#exhloj-local-remote button').innerText(), '查找原题'); await f.done();
   });
   await check('remote: QOJ title markers supply default links for the reported local problems without requests or writes', async () => {
     const cases = [
@@ -342,7 +433,7 @@ async function openDataPage(page) { await page.locator('[data-exh-fallback]').cl
       const f = await fixture('problem_detail', remoteBody, context, { path: '/d/pnoi/p/S1717' });
       assert.equal(await f.page.locator(`#exhloj-local-remote a[href="https://qoj.ac/problem/${id}"]`).count(), 1);
       assert.equal(f.requests.length, 1); assert.deepEqual(await f.page.evaluate(() => window.__gm), []); assert.deepEqual(await f.page.evaluate(() => window.__store), {});
-      await f.page.locator('[data-exh-action="remote-config"]').click();
+      await titleAction(f.page, 'remote-config');
       assert.equal(await f.page.locator('#exhloj-origin-type').inputValue(), 'qoj'); assert.equal(await f.page.locator('#exhloj-origin-target').inputValue(), String(id)); await f.done();
     }
   });
@@ -366,12 +457,12 @@ async function openDataPage(page) { await page.locator('[data-exh-fallback]').cl
       const f = await fixture('problem_detail', remoteBody + (item.extra || ''), { domain: { _id: 'test' }, pdoc: { docId: 10, pid: item.pid || 'S1717', title, content: 'Local', config: item.config || {} } },
         { storage: { ...noAuto, 'exhloj.coreui.cache.v1': JSON.stringify(item.cache || {}) } });
       if (item.expected) assert.equal(await f.page.locator(`#exhloj-local-remote a[href="${item.expected}"]`).count(), 1);
-      else assert.match(await f.page.locator('#exhloj-local-remote').textContent(), /已停用/);
+      else { assert.equal(await f.page.locator('#exhloj-local-remote button').count(), 0); assert.match(await (await openTitleMenu(f.page)).textContent(), /已停用/); }
       assert.equal(await f.page.locator(`#exhloj-local-remote a[href="${qoj(18209)}"]`).count(), 0); assert.deepEqual(await f.page.evaluate(() => window.__gm), []); await f.done();
     }
     const f = await fixture('problem_detail', remoteBody, { pdoc: { docId: 10, pid: 'S1717', title, config: {} } },
       { storage: { ...noAuto, 'exhloj.coreui.cache.v1': JSON.stringify(cases[0].cache) } });
-    await f.page.locator('[data-exh-action="remote-config"]').click(); await f.page.locator('[data-exh-action="remote-reset-origin"]').click();
+    await titleAction(f.page, 'remote-config'); await f.page.locator('[data-exh-action="remote-reset-origin"]').click();
     assert.equal(await f.page.locator(`#exhloj-local-remote a[href="${qoj(18209)}"]`).count(), 1); await f.done();
   });
   await check('remote: QOJ title defaults update with late titles and SPA navigation without duplicate or stale links', async () => {
@@ -406,7 +497,7 @@ async function openDataPage(page) { await page.locator('[data-exh-fallback]').cl
     return fixture('problem_detail', remoteBody, { pdoc: { docId: 10, pid: 'S10', title: '求和', content: '给定两个整数 $a,b$，输出 $a+b$。', config: {}, ...options.pdoc } },
       { storage: noAuto, ...options, remote: options.remote || searchLive });
   }
-  async function openSearch(f) { await f.page.locator('#exhloj-local-remote [data-exh-action="remote-search"]').click(); }
+  async function openSearch(f) { await titleAction(f.page, 'remote-search'); }
   async function finishSearch(f) {
     await f.page.locator('[data-exh-action="remote-search-run"]').click();
     await f.page.waitForFunction(() => document.querySelector('[data-exh-action="remote-search-cancel"]').disabled);
@@ -547,7 +638,7 @@ async function openDataPage(page) { await page.locator('[data-exh-fallback]').cl
   await check('remote: current live Luogu HTML schema, statement copy and persistent metadata cache', async () => {
     const f = await fixture('problem_detail', remoteBody, originContext('luogu', 'P1001'), { remote: { [metaURL]: { text: fs.readFileSync('tests/fixtures/luogu-problem.response', 'utf8') } } });
     await f.page.waitForSelector('[data-exh-difficulty="1"]');
-    await f.page.locator('[data-exh-action="remote-statement"]').click();
+    await titleAction(f.page, 'remote-statement');
     await f.page.waitForSelector('.exhloj-remote-article h1');
     assert.match(await f.page.locator('.exhloj-remote-article h1').innerText(), /P1001 A\+B/);
     await f.page.locator('[data-exh-action="remote-copy-statement"]').click();
@@ -571,7 +662,7 @@ async function openDataPage(page) { await page.locator('[data-exh-fallback]').cl
       assert.equal(await f.page.locator(`#exhloj-local-remote a[href="${url}"]`).count(), 1); await f.done();
     }
     const f = await fixture('problem_detail', remoteBody, originContext('luogu', 'P10873'), { remote: { [hatsURL]: { json: luoguMeta('P10873', null) } } });
-    await f.page.waitForFunction(() => document.querySelector('.exhloj-remote-status')?.textContent.includes('已读取'));
+    await openTitleMenu(f.page); await f.page.waitForFunction(() => document.querySelector('.exhloj-remote-status')?.textContent.includes('已读取'));
     assert.equal(await f.page.locator('[data-exh-difficulty]').count(), 0); await f.done();
   });
   await check('remote: a previous-scale cache is replaced by live metadata without modifying local user data', async () => {
@@ -588,7 +679,7 @@ async function openDataPage(page) { await page.locator('[data-exh-fallback]').cl
     for (const [key, old, current] of [['exhloj.problemOriginCache', 5, 6], ['exhloj.remoteOrigins', 6, 7], ['exhloj.remoteOrigins', 7, 8]]) {
       const stored = JSON.stringify({ [key]: { 'test/10': { type: 'luogu', target: 'P10873', difficulty: old } } });
       const f = await fixture('problem_detail', remoteBody, context, { storage: { ...noAuto, [cacheKey]: stored } });
-      await f.page.waitForSelector(`[data-exh-difficulty="${current}"]`); await f.page.locator('[data-exh-action="remote-config"]').click();
+      await f.page.waitForSelector(`[data-exh-difficulty="${current}"]`); await titleAction(f.page, 'remote-config');
       const select = f.page.locator('#exhloj-origin-difficulty'); assert.equal(await select.inputValue(), String(current));
       assert.equal(await f.page.evaluate(key => window.__store[key], cacheKey), stored);
       if (old !== 6) { await f.done(); continue; }
@@ -596,10 +687,10 @@ async function openDataPage(page) { await page.locator('[data-exh-fallback]').cl
       await f.page.waitForSelector('[data-exh-difficulty="5"]');
       const storage = await f.page.evaluate(() => window.__store); await f.done();
       const g = await fixture('problem_detail', remoteBody, context, { storage, remote: { [hatsURL]: { json: hatsMeta } } });
-      await g.page.waitForSelector('[data-exh-difficulty="5"]'); await g.page.locator('[data-exh-action="remote-config"]').click();
+      await g.page.waitForSelector('[data-exh-difficulty="5"]'); await titleAction(g.page, 'remote-config');
       await g.page.locator('#exhloj-origin-difficulty').selectOption({ label: '跟随原站' }); await g.page.locator('[data-exh-action="remote-save-origin"]').click();
       assert.equal(await g.page.locator('[data-exh-difficulty]').count(), 0);
-      await g.page.locator('[data-exh-action="remote-meta"]').click(); await g.page.waitForSelector('[data-exh-difficulty="7"]'); await g.done();
+      await titleAction(g.page, 'remote-meta'); await g.page.waitForSelector('[data-exh-difficulty="7"]'); await g.done();
     }
   });
   await check('remote: official CF API rating remains usable when Luogu returns 401', async () => {
@@ -611,7 +702,7 @@ async function openDataPage(page) { await page.locator('[data-exh-fallback]').cl
     } });
     await f.page.waitForSelector('[data-exh-cf-rating]');
     assert.equal(await f.page.locator('[data-exh-cf-rating]').innerText(), `CF *${expected}`);
-    assert.match(await f.page.locator('.exhloj-remote-status').innerText(), /登录/);
+    await openTitleMenu(f.page); assert.match(await f.page.locator('.exhloj-remote-status').innerText(), /登录/);
     const requests = await f.page.evaluate(() => window.__gm);
     assert.equal(requests.length, 2);
     assert.ok(requests.every(r => !JSON.stringify(r).includes('__token') && !JSON.stringify(r).includes('__uid')));
@@ -624,7 +715,7 @@ async function openDataPage(page) { await page.locator('[data-exh-fallback]').cl
       [solutionsURL(1)]: { json: { data: { solutions: { result: [{ lid: 'abc', author: { name: '<img>' }, content: raw }], count: 2 } } } },
       [solutionsURL(2)]: { json: { data: { solutions: { result: [{ lid: 'def', author: { name: 'User2' }, content: '# 第二篇\n\n$x^2$' }], count: 2 } } } },
     } });
-    await f.page.locator('[data-exh-action="remote-solutions"]').click();
+    await titleAction(f.page, 'remote-solutions');
     await f.page.waitForSelector('.exhloj-remote-solutions');
     assert.equal(await f.page.locator('.exhloj-remote-solutions script,.exhloj-remote-solutions iframe,.exhloj-remote-solutions [onerror]').count(), 0);
     assert.equal(await f.page.evaluate(() => window.pwned), undefined);
@@ -634,23 +725,23 @@ async function openDataPage(page) { await page.locator('[data-exh-fallback]').cl
     await f.page.locator('[data-exh-action="remote-more"]').click();
     await f.page.waitForFunction(() => document.querySelectorAll('.exhloj-remote-solutions .exhloj-remote-article').length === 2);
     assert.equal(await f.page.locator('[data-exh-action="remote-more"]').count(), 0);
-    const waiting = f.page.waitForEvent('download'); await f.page.locator('[data-exh-action="remote-export"]').click();
+    const waiting = f.page.waitForEvent('download'); await titleAction(f.page, 'remote-export');
     const download = await waiting; fs.copyFileSync(await download.path(), 'tests/output/remote-export.zip');
     fs.writeFileSync('tests/output/remote-export-expected.txt', raw); await f.done();
   });
   await check('remote: login errors leave controls retryable and do not create background request loops', async () => {
     const f = await fixture('problem_detail', remoteBody, originContext('luogu', 'P1001'), { storage: noAuto, remote: { [solutionsURL(1)]: { status: 401, text: 'Login' } } });
-    await f.page.locator('[data-exh-action="remote-solutions"]').click();
+    await titleAction(f.page, 'remote-solutions');
     await f.page.waitForFunction(() => document.querySelector('#exhloj-local-toast')?.textContent.includes('登录'));
     await f.page.waitForTimeout(1000); assert.equal((await f.page.evaluate(() => window.__gm)).length, 1);
     await f.page.evaluate(url => { window.__remote[url] = { json: { data: { solutions: { result: [], count: 0 } } } }; }, solutionsURL(1));
-    await f.page.locator('[data-exh-action="remote-solutions"]').click();
+    await titleAction(f.page, 'remote-solutions');
     await f.page.waitForSelector('.exhloj-remote-solutions'); assert.match(await f.page.locator('.exhloj-remote-solutions').innerText(), /0 篇/); await f.done();
   });
   await check('remote: local origin editing persists, imports legacy maps and preserves unrelated cache', async () => {
     const context = { domain: { _id: 'test' }, pdoc: { docId: 123, pid: 'P123', content: 'Local', config: {} } };
     const f = await fixture('problem_detail', remoteBody, context, { storage: { ...noAuto, 'exhloj.coreui.cache.v1': JSON.stringify({ 'exhloj.user': { keep: 1 } }) } });
-    await f.page.locator('[data-exh-action="remote-config"]').click();
+    await titleAction(f.page, 'remote-config');
     await f.page.locator('#exhloj-origin-type').selectOption('codeforces');
     await f.page.locator('#exhloj-origin-target').fill('CF1234A');
     await f.page.locator('#exhloj-origin-difficulty').selectOption('7');
@@ -697,14 +788,14 @@ async function openDataPage(page) { await page.locator('[data-exh-fallback]').cl
     await f.page.waitForTimeout(800);
     assert.equal(await f.page.locator('#exhloj-local-remote a').count(), 0);
     assert.equal(await f.page.locator('[data-exh-difficulty]').count(), 0);
-    assert.match(await f.page.locator('#exhloj-local-remote').innerText(), /未识别/); await f.done();
+    assert.equal(await f.page.locator('#exhloj-local-remote button').innerText(), '查找原题'); await f.done();
   });
 
   await check('remote: local inline/display formulas render as MathML while code blocks remain literal', async () => {
     const formula = '行内 $\\frac{a+b}{2}$。\n\n$$\n\\sum_{i=1}^n i\n$$\n\n```cpp\nstring s="$x$";\n```';
     const f = await fixture('problem_detail', remoteBody, originContext('luogu', 'P1001'), { storage: noAuto,
       remote: { [solutionsURL(1)]: { json: { data: { solutions: { result: [{ lid: 'math', content: formula, author: { name: 'Math' } }], count: 1 } } } } } });
-    await f.page.locator('[data-exh-action="remote-solutions"]').click();
+    await titleAction(f.page, 'remote-solutions');
     await f.page.waitForSelector('.exhloj-remote-solutions math');
     assert.equal(await f.page.locator('.exhloj-remote-solutions math').count(), 2);
     assert.equal(await f.page.locator('.exhloj-remote-solutions mfrac').count(), 1);
@@ -782,11 +873,11 @@ async function openDataPage(page) { await page.locator('[data-exh-fallback]').cl
     const f = await fixture('contest_detail', '<ol id="menu-nav-user"></ol>', { tdoc }, { path: `/d/test/contest/${tid}`, storage: fast() });
     await f.page.waitForTimeout(500);
     assert.equal(f.requests.length, 1); assert.equal(await f.page.locator('[data-exh-work-menu]').count(), 0);
-    assert.equal(await f.page.locator('#exhloj-contest-tools').count(), 1);
+    assert.equal(await f.page.locator('#exhloj-title-toggle').count(), 1);
     await f.page.addScriptTag({ content: script }); assert.equal(await f.page.locator('[data-exh-work-menu]').count(), 0);
     await f.done();
     const g = await fixture('contest_detail', '<ol id="menu-nav-user"></ol>', { tdoc }, { storage: fast({ contestHelper: false, juanMonitor: false, userModule: false }) });
-    assert.equal(await g.page.locator('[data-exh-work-menu]').count(), 0); assert.equal(await g.page.locator('#exhloj-contest-tools').count(), 0); await g.done();
+    assert.equal(await g.page.locator('[data-exh-work-menu]').count(), 0); assert.equal(await g.page.locator('#exhloj-title-toggle').count(), 0); await g.done();
   });
   await check('work: statement ZIP, Unicode and binary attachments, multilingual content, public contest files', async () => {
     const external = 'https://attachments.example.test/signed?a=1';
@@ -1149,28 +1240,28 @@ async function openDataPage(page) { await page.locator('[data-exh-fallback]').cl
     const f = await fixture('contest_detail', '<h1>Round</h1>', { tdoc: timelineDoc(3, '02', { title: 'Round,\nrating:test/99 <img onerror=x>' }) }, {
       path: '/d/test/contest/3', storage: userStorage({ contestHelper: false }), strictApi: true, api: { 'GET /d/test/contest/3/scoreboard': { body: ratingBoard() } }
     });
-    assert.equal(await f.page.locator('[data-exh-action="user-rate-current"]').count(), 1); assert.equal(f.requests.length, 1);
-    await f.page.locator('[data-exh-action="user-rate-current"]').click(); await finished(f, 'user'); const data = await storedRatings(f);
+    await openTitleMenu(f.page); assert.equal(await f.page.locator('[data-exh-action="user-rate-current"]').count(), 1); assert.equal(f.requests.length, 1);
+    await titleAction(f.page, 'user-rate-current'); await finished(f, 'user'); const data = await storedRatings(f);
     assert.deepEqual(data.records.slice(0, 5), ratingSample.records); assert.equal(data.contests[2][1], 'Round  rating:test/99 <img onerror=x>');
     assert.match(data.commands, /^# sample\nversion:2\ncontest:test\/3,/); assert.equal(data.commands.split('\nrating:test/3').length, 2); assert.equal(await f.page.locator('#exhloj-local-dialog img').count(), 0);
-    const before = await f.page.evaluate(() => JSON.stringify(window.__store)); await f.page.locator('[data-exh-action="close"]').click(); await f.page.locator('[data-exh-action="user-rate-current"]').click();
+    const before = await f.page.evaluate(() => JSON.stringify(window.__store)); await f.page.locator('[data-exh-action="close"]').click(); await titleAction(f.page, 'user-rate-current');
     assert.equal(await f.page.evaluate(() => JSON.stringify(window.__store)), before); assert.equal(f.requests.filter(r => r.kind === 'fetch').length, 1); await f.done();
   });
   await check('rating: shortcut preserves drafted weights and pending groups, and rejects ongoing contests', async () => {
     const draft = { ...ratingSample, commands: 'version:2\ncontest:test/3,Drafted,0\ncontest:test/4,Other,1,[[7,1]]\nrating:test/4' };
     const f = await fixture('contest_scoreboard', '', { tdoc: timelineDoc(3, '02') }, { path: '/d/test/contest/3/scoreboard', storage: userStorage({}, userSample, draft), strictApi: true, api: { 'GET /d/test/contest/3/scoreboard': { body: ratingBoard() } } });
-    await f.page.locator('[data-exh-action="user-rate-current"]').click(); await finished(f, 'user'); const data = await storedRatings(f);
+    await titleAction(f.page, 'user-rate-current'); await finished(f, 'user'); const data = await storedRatings(f);
     assert.equal(data.contests.at(-1)[2], 0); assert.equal(data.contests.at(-1)[1], 'Drafted'); assert.equal(data.contests.length, 4); assert.equal(data.records.at(-2)[3], 1801); assert.equal(data.commands.match(/contest:test\/3/g).length, 1); await f.done();
     const g = await fixture('contest_detail', '', { tdoc: { ...tdoc } }, { path: `/d/test/contest/${tid}`, storage: userStorage({}, {}, {}) });
-    await g.page.locator('[data-exh-action="user-rate-current"]').click(); assert.match(await g.page.locator('#exhloj-local-toast').textContent(), /尚未结束/); assert.equal(g.requests.length, 1); assert.equal((await storedRatings(g)).records.length, 0); await g.done();
+    await titleAction(g.page, 'user-rate-current'); assert.match(await g.page.locator('#exhloj-local-toast').textContent(), /尚未结束/); assert.equal(g.requests.length, 1); assert.equal((await storedRatings(g)).records.length, 0); await g.done();
   });
   await check('rating: toolbar follows module switches, late context and SPA routes without duplicate controls', async () => {
     const f = await fixture('contest_detail', '', {}, { path: '/d/test/contest/1', storage: userStorage() });
     await f.page.evaluate(() => { window.UiContext.tdoc = { docId: '1' }; document.body.append(document.createElement('p')); }); await f.page.waitForTimeout(250);
-    assert.equal(await f.page.locator('#exhloj-rating-tools').count(), 1);
+    assert.equal(await f.page.locator('#exhloj-title-toggle').count(), 1);
     await f.page.evaluate(() => { history.pushState({}, '', '/d/test/contest'); document.documentElement.dataset.page = 'contest_main'; window.dispatchEvent(new Event('pjax:end')); });
-    await f.page.waitForTimeout(250); assert.equal(await f.page.locator('[data-exh-action="user-rate-current"]').count(), 0); assert.equal(await f.page.locator('#exhloj-rating-tools [data-exh-action="user-timeline"]').count(), 1);
-    await openSettingsPage(f.page); await f.page.locator('[name="userModule"]').uncheck(); await f.page.locator('[data-exh-action="save-settings"]').click(); assert.equal(await f.page.locator('#exhloj-rating-tools').count(), 0); await f.done();
+    await f.page.waitForTimeout(250); await openTitleMenu(f.page); assert.equal(await f.page.locator('[data-exh-action="user-rate-current"]').count(), 0); assert.equal(await f.page.locator('#exhloj-title-popup [data-exh-action="user-timeline"]').count(), 1);
+    await openSettingsPage(f.page); await f.page.locator('[name="userModule"]').uncheck(); await f.page.locator('[data-exh-action="save-settings"]').click(); assert.equal(await f.page.locator('#exhloj-title-toggle').count(), 0); await f.done();
   });
   await check('rating: timeline scans paginated finished contests, uses local date boundaries and resets in time order', async () => {
     const docs = [timelineDoc(3, '02', { beginAt: '2020-01-02T15:59:00Z', endAt: '2020-01-02T16:59:00Z' }), timelineDoc(1, '01', { beginAt: '2019-12-31T16:00:00Z' }), timelineDoc(2, '01'),

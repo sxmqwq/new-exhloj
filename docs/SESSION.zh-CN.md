@@ -16,6 +16,6 @@
 
 ## 自动检查范围
 
-`npm run test:session` 启动仅监听 `127.0.0.1` 的 HTTP 服务器，通过 Chromium 的主机映射使用测试域名；浏览器只允许访问该本地服务器。测试会实际提交本地登录表单，获得 HttpOnly 会话 Cookie，再检查普通跳转、PJAX、前进/后退、错误恢复及异步响应隔离。账号和 Cookie 均为测试构造，不读取真实浏览器数据。
+`npm run test:session` 启动仅监听 `127.0.0.1` 的 HTTP 服务器。Chromium 通过本地测试代理访问测试域名；服务器只响应这个来源，不向外转发。测试会实际提交本地登录表单，获得 HttpOnly 会话 Cookie，再检查普通跳转、PJAX、前进/后退、错误恢复及异步响应隔离。账号和 Cookie 均为测试构造，不读取真实浏览器数据。
 
 `tests/output/session-results.json` 记录版本、脚本 SHA-256、检查名和结果，不记录 Cookie 内容。它验证的是浏览器请求行为和脚本缓存隔离；不替代实际 Hydro/HLOJ 模板、服务器和 Tampermonkey 沙箱的兼容性验证。
