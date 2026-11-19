@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Extend HLOJ
 // @namespace    exhloj-local
-// @version      2.9.2
+// @version      3.0.0
 // @description  HLOJ 训练助手：题源与难度、比赛、练习统计、用户资料和 Rating。
 // @homepageURL  https://github.com/sxmqwq/new-exhloj
 // @supportURL   https://github.com/sxmqwq/new-exhloj/issues
@@ -54,9 +54,9 @@
   if (!(location.hostname === 'oj.hailiangedu.com' ||
       location.host === 'www.nfls.com.cn:10611' || /(^|\.)oifha\.com$/.test(location.hostname))) return;
   if (document.documentElement.dataset.exhlojCoreUi) return;
-  document.documentElement.dataset.exhlojCoreUi = '2.9.2';
+  document.documentElement.dataset.exhlojCoreUi = '3.0.0';
 
-  const VERSION = '2.9.2';
+  const VERSION = '3.0.0';
   const SETTINGS_KEY = 'exhloj.coreui.settings.v1';
   const CACHE_KEY = 'exhloj.coreui.cache.v1';
   const CAPTCHA_KEY = 'exhloj.local.captcha.history';
@@ -64,12 +64,21 @@
   const LEGACY_KEYS = ['exhloj.problemOriginCache', 'exhloj.juan', 'exhloj.enabledPlugins',
     'exhloj.weeklyRoundsData', 'exhloj.user', 'exhloj.userStoreVersion', 'exhloj.nfls', 'exhloj.remoteOrigins',
     'exhloj.ratedcontests', 'exhloj.ratedcontests.version', 'model.user.display-name', 'model.user.display-ccflevel'];
+  const MENU_OPTIONS = {
+    hideEmptyDiscussion: ['隐藏零讨论', true], hideEmptySolution: ['隐藏零题解', true],
+    showUnknownSimilarity: ['权限未知时显示比赛查重', false],
+    showUnknownHomeworkSimilarity: ['权限未知时显示作业查重', false],
+    hideNavProblems: ['隐藏题库', true], hideNavTraining: ['隐藏训练', true],
+    hideNavDiscussion: ['隐藏讨论', true], hideNavRecords: ['隐藏评测记录', true],
+    profileInfoEntry: ['显示「用户信息」入口', true],
+  };
   const OPTIONS = {
     rounded: ['卡片圆角与布局', true], homework: ['作业标题与附件', true],
     scoreboard: ['榜单奖牌、标题链接与最早提交标记', true],
     markdown: ['复制题面 / 题解 Markdown', true], cph: ['发送到 CPH', true], editor: ['发送到 CP Editor', true],
     avatar: ['头像链接设置入口', true], permissions: ['查看用户权限', true],
     cleanMenu: ['隐藏失效菜单链接', true],
+    ...MENU_OPTIONS,
   };
   const DEFAULTS = { ui: true, captcha: true, remote: true, contestHelper: true, juanMonitor: true,
     userModule: true, userDisplay: 'no-change', userCCF: false,
@@ -212,6 +221,15 @@
     .exhloj-panel-footer{font-size:12px;color:#66788a;display:flex;gap:16px;flex-wrap:wrap;margin-top:20px}
     @media(max-width:520px){#exhloj-local-dialog header{padding:14px 16px}#exhloj-local-dialog .exhloj-dialog-body{padding:10px 16px 18px}.exhloj-panel-grid{grid-template-columns:1fr;gap:9px}.exhloj-panel-nav{padding:0 12px 9px}#exhloj-local-dialog .exhloj-panel-tab{padding:6px 10px}}
     #exhloj-local-dialog label{display:block;margin:9px 0}#exhloj-local-dialog input[type=checkbox]{margin-right:9px}
+    [data-exh-menu-hidden]{display:none!important}
+    #exhloj-profile-entry{display:inline-flex;align-items:center;vertical-align:middle;box-sizing:border-box;width:auto;min-height:28px;margin:2px 4px;padding:2px 10px;border:1px solid #cbd8e2;border-radius:5px;background:#eff5f8;color:#284e69;font:inherit;font-size:13px;line-height:1.4;white-space:nowrap;cursor:pointer}
+    .profile-header #exhloj-profile-entry{background:#263a5266;color:white;border-color:#ffffff9c}
+    #exhloj-profile-entry:focus-visible{outline:2px solid currentColor;outline-offset:2px}
+    #exhloj-profile-view details{margin:10px 0}#exhloj-profile-view summary{font-weight:600}
+    #exhloj-menu-options{margin:12px 0;padding:8px 12px 12px;border:1px solid #ccd7df;border-radius:6px;min-width:0}
+    #exhloj-menu-options .exhloj-menu-options-row{display:flex;flex-wrap:wrap;gap:0 16px}
+    #exhloj-menu-options label{margin:3px 0}
+    #exhloj-menu-options p{margin:2px 0 8px;font-size:13px}
     #exhloj-local-dialog textarea{box-sizing:border-box;width:100%;height:150px;font:12px/1.6 monospace;color:#263445;background:#f7f9fb}
     #exhloj-local-dialog input[type=number]{width:90px;color:#263445;background:white;border:1px solid #aaa;padding:3px}
     #exhloj-local-dialog summary{cursor:pointer}#exhloj-local-dialog pre{white-space:pre-wrap;overflow-wrap:anywhere}
@@ -287,7 +305,7 @@
     .exhloj-user-ccf>svg{display:block;width:100%;height:100%;fill:currentColor}
     .exhloj-user-ccf-green{color:#5eb95e}.exhloj-user-ccf-blue{color:#3498db}.exhloj-user-ccf-gold{color:#f1c40f}
     .exhloj-user-gain{color:green}.exhloj-user-loss{color:#c33}.exhloj-user-data{display:grid;grid-template-columns:auto 1fr;gap:4px 12px}
-    .exhloj-user-data dt,.exhloj-user-data dd{margin:0;overflow-wrap:anywhere}#exhloj-local-user-card{padding:12px}
+    .exhloj-user-data dt,.exhloj-user-data dd{margin:0;overflow-wrap:anywhere}
     [data-exh-user-column]{text-align:center;white-space:nowrap}#exhloj-user-commands,#exhloj-user-json{height:230px!important}
   `;
   document.head.append(baseStyle);
@@ -396,10 +414,22 @@
     const moduleInput = el('input', { type: 'checkbox', name: 'ui' }); moduleInput.checked = settings.ui;
     moduleLabel.append(moduleInput, '界面增强'); form.append(moduleLabel);
     for (const [key, [text]] of Object.entries(OPTIONS)) {
-      if (key === 'cph' || key === 'editor') continue;
+      if (key === 'cph' || key === 'editor' || Object.hasOwn(MENU_OPTIONS, key)) continue;
       const label = el('label'), input = el('input', { type: 'checkbox', name: key });
       input.checked = settings.options[key]; label.append(input, text); form.append(label);
     }
+    const menus = el('fieldset', { id: 'exhloj-menu-options' }); menus.append(el('legend', {}, '菜单精简'));
+    for (const [name, keys] of [['题目侧栏', ['hideEmptyDiscussion', 'hideEmptySolution']], ['作业与比赛侧栏', ['showUnknownHomeworkSimilarity', 'showUnknownSimilarity']],
+      ['顶部导航', ['hideNavProblems', 'hideNavTraining', 'hideNavDiscussion', 'hideNavRecords']], ['用户主页', ['profileInfoEntry']]]) {
+      const row = el('div', { class: 'exhloj-menu-options-row' });
+      for (const key of keys) {
+        const label = el('label'), input = el('input', { type: 'checkbox', name: key });
+        input.checked = settings.options[key]; label.append(input, MENU_OPTIONS[key][0]); row.append(label);
+      }
+      menus.append(el('strong', {}, name), row);
+      if (name === '作业与比赛侧栏') menus.append(el('p', {}, '明确有权限时显示，明确无权限时隐藏。两个开关只影响权限未知的入口。'));
+    }
+    form.append(menus);
     const editors = el('fieldset', { id: 'exhloj-editor-options' }); editors.append(el('legend', {}, '发送到编辑器'));
     for (const key of ['cph', 'editor']) {
       const portKey = key + 'Port', toggle = el('input', { type: 'checkbox', name: key }), label = el('label');
@@ -545,6 +575,107 @@
     // 清除旧版分散插入的工具项，用户菜单只保留一个插件入口。
     for (const item of $$('[data-exh-work-menu]', menu || document)) item.remove();
   }
+  const mainNav = 'nav.nav .nav__list--main, #menu .nav__list--main';
+  const sideMenus = '.section--problem-sidebar, .section--contest-sidebar, .section--homework-sidebar, .medium-3.columns, .section.side';
+  const navSections = [
+    ['hideNavProblems', /^\/(?:p|problem|problems)$/, /^(?:题库|題庫|problems?|problem set)$/i],
+    ['hideNavTraining', /^\/(?:training|trainings)$/, /^(?:训练|訓練|training|trainings)$/i],
+    ['hideNavDiscussion', /^\/(?:discuss|discussion|discussions)$/, /^(?:讨论|討論|discussions?)$/i],
+    ['hideNavRecords', /^\/(?:record|records|submissions)$/, /^(?:评测记录|评测纪录|評測記錄|評測紀錄|records?|submissions?|judge records?)$/i],
+  ];
+  const menuText = node => (node?.textContent || '').normalize('NFKC').replace(/\s+/g, ' ').trim();
+  function menuPath(link) {
+    const href = link.getAttribute('href'); if (!href || href.startsWith('#')) return null;
+    try {
+      const url = new URL(href, location.href);
+      return url.origin === location.origin ? url.pathname.replace(/^\/d\/[^/]+(?=\/|$)/, '').replace(/\/+$/, '') : null;
+    } catch { return null; }
+  }
+  function zeroMenuKey(link, row) {
+    const match = /^(讨论|討論|discussions?|题解|題解|solutions?)(?:\s*\(\s*(\d+)\s*\)|\s*(\d+))?$/i.exec(menuText(link));
+    if (!match || !/^0+$/.test(match[2] ?? match[3] ?? link.dataset.count ?? row.dataset.count ?? '')) return '';
+    return /^(讨论|討論|discussions?)$/i.test(match[1]) ? 'hideEmptyDiscussion' : 'hideEmptySolution';
+  }
+  function currentSimilarityActivity() {
+    const name = pageName(), path = location.pathname.replace(/^\/d\/[^/]+(?=\/|$)/, '');
+    const route = path.match(/^\/(?:discuss\/)?(homework|contest)\/([^/]+)/);
+    if (route) return { kind: route[1], id: route[2] };
+    if (/^\/(?:homework|contest)\/?$/.test(path) || /^(?:homework|contest)_main$/.test(name)) return null;
+    const pageKind = name.match(/^(homework|contest)_/)?.[1];
+    const doc = ui().tdoc, docId = String(doc?.docId || doc?._id || '');
+    const tid = new URLSearchParams(location.search).get('tid'), id = tid || docId;
+    if (!pageKind && !(isProblemPage(name) && tid && tid === docId && doc?.rule === 'homework')) return null;
+    const kind = docId === id && doc?.rule === 'homework' ? 'homework' : pageKind;
+    return id ? { kind, id } : null;
+  }
+  function isSimilarityEntry(link, activity) {
+    if (/^(?:(?:代码|代碼|程式碼)\s*(?:相似度|查重)(?:查询|查詢|检查|檢查|检测|檢測)?|(?:code\s+)?(?:similarity|plagiarism)(?:\s+(?:query|check(?:er)?|report))?)(?:$|\s*[(（])/i.test(menuText(link))) return true;
+    const path = menuPath(link) || '', route = path.match(/^\/(homework|contest)\/([^/]+)\/(?:hydroac-sim|sim|moss|plagiarism|(?:code[-_])?similarity)$/i);
+    // Homework can use the shared contest similarity route on Hydro.
+    return !!route && route[2] === activity.id && (route[1] === activity.kind || activity.kind === 'homework' && route[1] === 'contest');
+  }
+  function similarityAccess(link, row, activity) {
+    let granted = false;
+    for (const node of new Set([link, row])) {
+      if (node.matches(':disabled,.disabled,[aria-disabled="true"]') ||
+          /无权限|没有权限|没有查看权限|权限不足|無權限|權限不足|permission denied|access denied|no permission/i.test([node.title, node.getAttribute('aria-label'), menuText(link)].join(' '))) return false;
+      for (const value of [node.dataset.canViewSimilarity, node.dataset.canAccess, node.dataset.permissionStatus]) {
+        if (value === 'false' || value === 'denied') return false;
+        if (value === 'true' || value === 'allowed') granted = true;
+      }
+    }
+    // Only use explicit permissions for the viewer and the current activity; an active link alone does not grant access.
+    const context = ui(), doc = context.tdoc, viewer = context.viewerId ?? context.tsdoc?.uid;
+    if (viewer != null && String(viewer) === String(user()._id) && String(doc?.docId || doc?._id || '') === activity.id &&
+        (!doc?.domainId || doc.domainId === domainId()) && (!doc?.rule || (doc.rule === 'homework') === (activity.kind === 'homework'))) {
+      for (const value of [context.canViewSimilarity, context.canViewCodeSimilarity, context.permissions?.canViewSimilarity]) {
+        if (value === false) return false;
+        if (value === true) granted = true;
+      }
+    }
+    return granted ? true : null;
+  }
+  function syncMenuVisibility() {
+    const hidden = new Set(), touchedMenus = new Set(), marker = 'data-exh-menu-hidden';
+    if (settings.ui) {
+      for (const nav of $$(mainNav)) for (const link of $$(':scope > li > a, :scope > a.nav__item', nav)) {
+        const path = menuPath(link); if (path == null) continue;
+        const label = menuText(link);
+        const match = navSections.find(([, , names]) => names.test(label)) ||
+          (!link.search && !link.hash && navSections.find(([, route]) => route.test(path)));
+        if (match && enabled(match[0])) hidden.add(link.parentElement === nav ? link : link.parentElement);
+      }
+      const activity = currentSimilarityActivity(), problem = isProblemPage() || /^problem_(?:submit|solution|statistics|files)$/.test(pageName());
+      for (const link of $$(':is(' + sideMenus + ') :is(a.menu__link,button.menu__link,.menu__item > a,.menu__item > button)')) {
+        if (link.closest('.typo,.markdown-body,#exhloj-local-dialog')) continue;
+        const row = link.parentElement.matches('li,.menu__item') ? link.parentElement : link;
+        let hide = false;
+        if ((problem || link.closest('.section--problem-sidebar')) && !/^\/discuss\/(?:contest|homework)\//.test(menuPath(link) || '')) {
+          const key = zeroMenuKey(link, row); hide = !!key && enabled(key);
+        }
+        if (activity && isSimilarityEntry(link, activity)) {
+          const access = similarityAccess(link, row, activity);
+          hide = access === false || (access === null && !enabled(activity.kind === 'homework' ? 'showUnknownHomeworkSimilarity' : 'showUnknownSimilarity'));
+        }
+        if (hide) {
+          const target = row !== link && $$('a,button', row).length !== 1 ? link : row;
+          hidden.add(target);
+          if (target.parentElement.matches('ol.menu,ul.menu')) touchedMenus.add(target.parentElement);
+        }
+      }
+      for (const menu of touchedMenus) {
+        let hasItem = false, pending = null;
+        for (const item of menu.children) {
+          if (item.matches('.menu__seperator,.menu__separator')) {
+            if (!hasItem || pending) hidden.add(item); else pending = item;
+          } else if (!hidden.has(item) && !item.hidden) { hasItem = true; pending = null; }
+        }
+        if (pending) hidden.add(pending);
+      }
+    }
+    for (const node of $$('[data-exh-menu-hidden]')) if (!hidden.has(node)) node.removeAttribute(marker);
+    for (const node of hidden) if (!node.hasAttribute(marker)) node.setAttribute(marker, '');
+  }
   function niceSize(value) {
     const size = Number(value);
     if (value == null || value === '' || !Number.isFinite(size) || size < 0) return '—';
@@ -554,14 +685,11 @@
   }
   let homeworkStarted = false, recordStarted = false, solutionStarted = false;
   function mainColumn() { return $('.main .medium-9.columns, .medium-9.columns, main, .main'); }
-  function profilePanelTarget() {
-    const primary = $('.main .medium-9.columns') || $('.medium-9.columns') || mainColumn(), row = primary?.parentElement;
-    if (row?.classList.contains('row')) {
-      const sidebar = [...row.children].find(node => node.matches('.medium-3.columns'));
-      if (sidebar) return sidebar;
-      if (primary.matches('.medium-9.columns')) { const aside = el('aside', { class: 'medium-3 columns', 'data-exh-profile-sidebar': '' }); row.append(aside); return aside; }
-    }
-    return primary;
+  function profileEntryTarget() {
+    const primary = $('.main > .row > .medium-9.columns') || $('main, .main');
+    if (!primary) return null;
+    const header = $('.profile-header', primary);
+    return (header && ($('.profile-header__contact-bar', header) || $('.profile-header__main', header) || header)) || primary;
   }
   async function homework() {
     if (homeworkStarted || !mainColumn()) return;
@@ -2644,14 +2772,49 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
     return ({ 1: '高三', 2: '高二', 3: '高一', 4: '初三', 5: '初二', 6: '初一', 7: '六年级', 8: '五年级', 9: '四年级', 10: '三年级' })[offset] || (offset <= 0 ? `高中毕业 ${1 - offset} 年` : '未到对应年级');
   }
   function refreshUserProfile() {
-    const prior = $('#exhloj-local-user-card'), uid = userProfileId();
-    if (!settings.userModule || pageName() !== 'user_detail' || !(uid > 0)) { prior?.remove(); return; }
-    const target = profilePanelTarget(); if (!target) return;
-    if (prior && prior.parentElement !== target) target.prepend(prior);
-    const store = userStore(), profile = store.users.oiers[uid], history = store.histories.get(uid) || [], teacher = store.users.teachers.includes(uid);
-    const signature = JSON.stringify([uid, profile, teacher, store.users.practice[uid], history]); if (prior?.dataset.signature === signature) return;
-    const section = el('section', { id: 'exhloj-local-user-card', class: 'section side', 'data-signature': signature }), body = el('div', { class: 'section__body typo' });
-    section.append(el('h2', { class: 'section__title' }, '用户信息 · 本地资料'), body);
+    const trigger = $('#exhloj-profile-entry'), view = $('#exhloj-profile-view');
+    const uid = pageName() === 'user_detail' && userProfileId();
+    const target = uid > 0 && settings.options.profileInfoEntry && (settings.userModule || enabled('permissions')) && profileEntryTarget();
+    if (!target) { trigger?.remove(); view?.closest('dialog[open]')?.close(); return; }
+    const entry = trigger || button('用户信息', 'profile-info', { id: 'exhloj-profile-entry', 'aria-haspopup': 'dialog' });
+    if (entry.dataset.uid !== String(uid)) entry.dataset.uid = uid;
+    if (entry.parentElement !== target) {
+      if (target.closest('.profile-header')) target.append(entry); else target.prepend(entry);
+    }
+    if (view?.closest('dialog[open]')) {
+      if (+view.dataset.uid !== uid) view.closest('dialog').close();
+      else renderProfileInfo(view, uid);
+    }
+  }
+  function openProfileInfo(control) {
+    syncPageContext();
+    const uid = userProfileId();
+    if (!settings.options.profileInfoEntry || pageName() !== 'user_detail' || !(uid > 0) || +control.dataset.uid !== uid ||
+        (!settings.userModule && !enabled('permissions'))) { refreshUserProfile(); return; }
+    const body = modal('用户信息', 'user'), dialog = body.closest('dialog');
+    const view = el('div', { id: 'exhloj-profile-view', 'data-uid': uid });
+    body.append(view); renderProfileInfo(view, uid);
+    dialog.addEventListener('close', () => dialog.remove(), { once: true });
+  }
+  function renderProfileInfo(view, uid) {
+    const data = current('udoc'), doc = +data?._id === uid ? data : null;
+    const store = settings.userModule ? userStore() : null, profile = store?.users.oiers[uid], rating = store ? userRating(uid) : null;
+    const permEnabled = enabled('permissions'), bits = permEnabled ? permissionValue(doc) : null;
+    const title = doc?.uname || profile?.uname || '';
+    const signature = JSON.stringify([uid, title, domainId(), doc?.role, permEnabled, bits?.toString(), !!store, profile,
+      store?.users.teachers.includes(uid), store?.users.practice[uid], rating]);
+    if (view.exhProfileSignature === signature) return;
+    const permsOpen = !!$('#exhloj-profile-permissions', view)?.open, awardsOpen = !!$('#exhloj-profile-awards', view)?.open;
+    view.exhProfileSignature = signature;
+    view.replaceChildren(el('p', { class: 'exhloj-panel-summary' }, (title ? title + ' · ' : '') + 'UID ' + uid + ' · 当前域：' + domainId()));
+    if (permEnabled) renderProfilePermissions(view, doc, bits, permsOpen);
+    if (store) {
+      const body = el('section', { id: 'exhloj-local-user-card' }); body.append(el('h3', {}, '本地资料'));
+      view.append(body); renderLocalProfile(body, uid, store, awardsOpen);
+    }
+  }
+  function renderLocalProfile(body, uid, store, awardsOpen) {
+    const profile = store.users.oiers[uid], teacher = store.users.teachers.includes(uid);
     const dl = el('dl', { class: 'exhloj-user-data' });
     for (const [title, value] of [['教练标记', teacher ? '是' : '否'], ['姓名', profile?.name || '未填写'], ['CCF 评级', profile?.level ? `${profile.level} 级` : '未填写'], ['就读年级', profileGrade(profile?.grade)], ['题目分', store.users.practice[uid] ?? '未填写']]) dl.append(el('dt', {}, title), el('dd', {}, value));
     const rating = el('dd'); rating.append(ratingNode(userRating(uid))); dl.append(el('dt', {}, 'Rating'), rating);
@@ -2662,15 +2825,15 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
     body.append(dl, button('编辑本地资料', 'user-edit', { 'data-uid': uid }), button('Rating 历史', 'user-history', { 'data-uid': uid }), button('Rating 排行榜', 'user-ranking'));
     if (profile?.oierId) body.append(button('刷新 OIerDb 资料', 'user-oier-refresh', { 'data-uid': uid }));
     if (profile?.records.length) {
-      body.append(el('h3', {}, '获奖信息'));
+      const awards = el('details', { id: 'exhloj-profile-awards' }); awards.open = awardsOpen;
+      awards.append(el('summary', {}, '获奖信息（' + profile.records.length + '）')); body.append(awards);
       for (const record of profile.records) {
         const p = el('p'), medal = ['一等奖', '金牌'].includes(record.awards) ? '🥇 ' : ['二等奖', '银牌'].includes(record.awards) ? '🥈 ' : ['三等奖', '铜牌'].includes(record.awards) ? '🥉 ' : '';
         p.append(el('strong', {}, record.contest), el('br'), el('span', {}, `${medal}${record.awards}${record.score === '' ? '' : `（${record.score}${record.fullScore === undefined ? '' : ` / ${record.fullScore}`} 分）`}`));
         const details = [record.rank ? `排名 ${record.rank}${record.participants ? ` / ${record.participants}` : ''}` : '', record.province, record.school, record.grade].filter(Boolean);
-        if (details.length) p.append(el('br'), el('small', {}, details.join(' · '))); body.append(p);
+        if (details.length) p.append(el('br'), el('small', {}, details.join(' · '))); awards.append(p);
       }
     }
-    if (prior) prior.replaceWith(section); else target.prepend(section);
   }
   function refreshUserScoreboards() {
     const store = userStore(), context = contestContext(), index = store.ratings.contests.findIndex(row => row[0] === `${context.domain}/${context.id}`);
@@ -3064,10 +3227,18 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
     const mappings = Object.entries(userStore().users.oiers).filter(([key, profile]) => profile.oierId && (uid === undefined || +key === +uid)).map(([key, profile]) => [+key, profile.oierId, JSON.stringify(profile)]);
     if (!mappings.length) throw workError('没有已绑定的 OIerDb ID；请先在编辑资料中粘贴选手链接并保存');
     const editor = $('#exhloj-user-editor'), editorBaseline = editor ? oierEditorSnapshot(editor) : undefined;
-    if (!control.closest('#exhloj-local-dialog')) { const body = userToolBody('刷新 OIerDb 资料'); workProgress(body, 'oier'); }
+    const sourceProfile = control.closest('#exhloj-profile-view'), sourceEpoch = routeEpoch;
+    if (sourceProfile) {
+      const body = sourceProfile.parentElement;
+      if (!$('[data-work-progress="oier"]', body)) workProgress(body, 'oier');
+    } else if (!control.closest('#exhloj-local-dialog')) { const body = userToolBody('刷新 OIerDb 资料'); workProgress(body, 'oier'); }
     await runWork('oier', async (job, state) => {
       const database = await loadOIerDatabase(job), profiles = await readOIerProfiles(database, mappings.map(([, id]) => id), job);
-      checkJob(job); const { users, ratings } = userStore(), next = clone(users), updatedKeys = new Set(); let updated = 0;
+      checkJob(job);
+      if (sourceProfile) syncPageContext();
+      if (sourceProfile && (sourceEpoch !== routeEpoch || !sourceProfile.closest('dialog[open]') || userProfileId() !== uid))
+        throw workError('已离开此用户资料页，未写入刷新结果');
+      const { users, ratings } = userStore(), next = clone(users), updatedKeys = new Set(); let updated = 0;
       for (const [key, id, baseline] of mappings) {
         if (next.oiers[key]?.oierId !== id) { state.errors.push(`OJ #${key} 的绑定已变化，已跳过`); continue; }
         if (JSON.stringify(next.oiers[key]) !== baseline) { state.errors.push(`OJ #${key} 的本地资料已变化，已跳过；重新刷新可更新`); continue; }
@@ -3705,37 +3876,27 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
     "description": "View ranking"
   }
 ];
-  function permissionValue() {
-    const value = current('udoc')?.perm;
-    if (value === undefined || value === null) return null;
+  function permissionValue(doc) {
+    const value = doc?.perm;
     if (typeof value === 'number' && !Number.isSafeInteger(value)) return null;
-    try { return BigInt(String(value).replace(/^BigInt::/, '')); } catch { return null; }
+    if (!['number', 'bigint', 'string'].includes(typeof value)) return null;
+    const text = String(value).replace(/^BigInt::/, '').trim();
+    if (!text) return null;
+    try { return BigInt(text); } catch { return null; }
   }
-  function permissionTools() {
-    const prior = $('#exhloj-local-permissions'), value = permissionValue();
-    if (value === null) { prior?.remove(); return; }
-    const target = profilePanelTarget();
-    if (!target) return;
-    const count = PERMISSIONS.filter(p => (value & (1n << BigInt(p.bit))) !== 0n).length;
-    if (prior) {
-      if (prior.parentElement !== target) target.prepend(prior);
-      const button = $('[data-exh-action="permissions"]', prior), text = `拥有权限 (${count})`; if (button && button.textContent !== text) button.textContent = text;
-      return;
-    }
-    const section = el('div', { class: 'section side', id: 'exhloj-local-permissions' });
-    section.append(button(`拥有权限 (${count})`, 'permissions')); target.prepend(section);
-  }
-  function showPermissions() {
-    const value = permissionValue();
-    if (value === null) throw new Error('页面未提供完整的权限位');
-    const body = modal('用户权限', 'user');
-    body.append(el('p', {}, `当前域：${domainId()}；角色：${current('udoc')?.role || '未知'}。权限位对应原版 Hydro 定义。`));
+  function renderProfilePermissions(view, doc, bits, expanded) {
+    const box = el('details', { id: 'exhloj-profile-permissions' }); box.open = expanded;
+    const has = p => (bits & (1n << BigInt(p.bit))) !== 0n;
+    const count = bits === null ? null : PERMISSIONS.filter(has).length;
+    box.append(el('summary', {}, '拥有权限' + (count === null ? '（未知）' : '（' + count + '）')));
+    view.append(box);
+    if (doc?.role) box.append(el('p', {}, '当前域角色：' + doc.role));
+    if (bits === null) { box.append(el('p', {}, '原站未提供此用户完整的当前域权限，无法判断。')); return; }
     const table = el('table'), head = el('tr'); head.append(el('th', {}, '权限'), el('th', {}, '状态')); table.append(head);
-    for (const p of PERMISSIONS) {
-      const row = el('tr'); row.append(el('td', { title: p.name }, translate(p.description)),
-        el('td', {}, (value & (1n << BigInt(p.bit))) !== 0n ? '✓' : '—')); table.append(row);
+    for (const p of [...PERMISSIONS.filter(has), ...PERMISSIONS.filter(p => !has(p))]) {
+      const row = el('tr'); row.append(el('td', { title: p.name }, translate(p.description)), el('td', {}, has(p) ? '✓' : '—')); table.append(row);
     }
-    body.append(table);
+    box.append(table);
   }
 
   const busyActions = new Set();
@@ -3744,6 +3905,11 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
     if (!control) return;
     event.preventDefault();
     const action = control.dataset.exhAction;
+    const profileView = control.closest('#exhloj-profile-view');
+    if (profileView) {
+      syncPageContext();
+      if (!profileView.closest('dialog[open]') || +profileView.dataset.uid !== userProfileId() || pageName() !== 'user_detail') return;
+    }
     if (titlePopup?.contains(control) || control.closest('#exhloj-local-remote')) {
       const epoch = routeEpoch; syncPageContext();
       if (epoch !== routeEpoch && action !== 'problem-copy') { schedule(); return; }
@@ -3795,7 +3961,7 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
           notify(`已发送到 ${action === 'cph' ? 'CPH' : 'CP Editor'}（${payload.tests.length} 组样例）`); break;
         }
         case 'avatar-save': await saveAvatar(); break;
-        case 'permissions': showPermissions(); break;
+        case 'profile-info': openProfileInfo(control); break;
         case 'user-open': openUserTools(); break;
         case 'user-edit': openUserEditor(control.dataset.uid || $('#exhloj-user-id')?.value); break;
         case 'user-history': openUserHistory(control.dataset.uid || $('#exhloj-user-id')?.value); break;
@@ -3917,7 +4083,7 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
       const accountChanged = owner !== routeOwner;
       route = location.href; routeOwner = owner; routeName = name;
       routeEpoch++; contextBody = {}; pageRequest = undefined;
-      if ($('#exhloj-contest-files')) $('#exhloj-local-dialog')?.close();
+      if ($('#exhloj-contest-files, #exhloj-profile-view')) $('#exhloj-local-dialog')?.close();
       semanticPanel?.controller?.abort();
       if (semanticPanel?.body.isConnected) renderSearchResults(semanticPanel);
       if (accountChanged) for (const job of workJobs.values()) job.controller.abort();
@@ -3927,14 +4093,14 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
       lastPageError = ''; homeworkStarted = recordStarted = solutionStarted = false;
       clearLocalRemote(); removeTitleTools(); remotePending = false; contestRevealed = false;
       lastEvents.delete('homework_detail.prepare'); lastEvents.delete('record_detail.prepare');
-      for (const id of ['exhloj-local-avatar', 'exhloj-local-permissions', 'exhloj-local-origin-code', 'exhloj-local-user-card']) $(`#${id}`)?.remove();
+      for (const id of ['exhloj-local-avatar', 'exhloj-local-origin-code', 'exhloj-profile-entry']) $(`#${id}`)?.remove();
     }
   }
   function refresh() {
     syncPageContext();
     document.documentElement.classList.toggle('exhloj-local-rounded', enabled('rounded'));
     document.documentElement.classList.toggle('exhloj-local-ui', settings.ui);
-    installMenu();
+    installMenu(); syncMenuVisibility();
     try {
       if (page.UiContext) {
         if (!page.UiContext.exhloj) page.UiContext.exhloj = {};
@@ -3949,7 +4115,6 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
     if (enabled('scoreboard') && name.endsWith('scoreboard')) scoreboard();
     if (enabled('markdown') && name === 'problem_solution') solutionTools();
     if (enabled('avatar') && name === 'home_account') avatarTools();
-    if (enabled('permissions') && name === 'user_detail') permissionTools();
     if (settings.captcha) runCaptcha();
     if (isProblemPage(name)) remoteProblem();
     if (settings.remote && name === 'record_detail') remoteSubmissionTools();
@@ -3960,15 +4125,22 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
   }
   let refreshTimer;
   function schedule() { clearTimeout(refreshTimer); refreshTimer = setTimeout(() => task(refresh), 120); }
+  const menuAttributes = ['class', 'href', 'title', 'aria-label', 'aria-disabled', 'disabled', 'data-count', 'data-can-access', 'data-can-view-similarity', 'data-permission-status'];
   const observer = new MutationObserver(records => {
+    let menuChanged = false;
     if (records.some(record => {
       const target = record.target.nodeType === Node.ELEMENT_NODE ? record.target : record.target.parentElement;
       if (target?.closest('#exhloj-local-dialog, #exhloj-local-toast, #exhloj-title-popup')) return false;
+      if (record.type === 'attributes' && menuAttributes.includes(record.attributeName)) {
+        menuChanged ||= !!target?.closest(mainNav + ',' + sideMenus + ',[data-exh-menu-hidden]');
+        return false;
+      }
       // 仅监听 DOM 内容、页面名称和上下文脚本变化，避免自身样式修改形成循环。
       return true;
     })) schedule();
+    else if (menuChanged) syncMenuVisibility();
   });
-  observer.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['src'] });
+  observer.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['src', ...menuAttributes] });
   observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-page'] });
   for (const event of ['pjax:end', 'vjContentNew', 'popstate', 'pageshow']) window.addEventListener(event, schedule);
   // Hydro 的部分版本通过 jQuery 触发 vjContentNew，原生监听器无法接收。

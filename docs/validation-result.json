@@ -1,10 +1,15 @@
 {
-  "version": "2.9.2",
-  "scriptSha256": "49f0f514a4cbbc31e82d356daa35f6a8ef576d4fc0137f06eb741acbabae70cf",
+  "version": "3.0.0",
+  "scriptSha256": "74007b5801f26515fe020ee9588b8519e1913283c0faafd94b56f46484a94ba6",
   "browser": "153.0.8010.0",
-  "passed": 131,
+  "passed": 137,
   "checks": [
     "core: search stays clickable, userscript command and lazy account menu open the same panel",
+    "menu visibility: problem, contest and navigation switches persist and restore the native links independently",
+    "menu visibility: zero is explicit, counts and PJAX menus can change, unrelated actions keep their handlers",
+    "menu visibility: contest similarity requires explicit permission, unknown is manual, known denial always wins",
+    "menu visibility: homework similarity is manual when unknown, independent of contest settings, and never overrides denial",
+    "menu visibility: homework permission must match the viewer, document and domain; lists and standalone problems stay untouched",
     "core: save UI switch and preserve ports across reinstall/page load",
     "panel: a single menu entry replaces old tool links and preserves native account actions",
     "panel: all tools and automatic attendance settings share the same navigable dialog",
@@ -106,7 +111,8 @@
     "oier audit: a refresh preserves saved profile edits even when the binding is unchanged",
     "oier audit: link reads preserve edits typed into the form while downloading",
     "oier audit: refreshing saved data does not replace a newly edited form draft",
-    "oier: profile and permission panels are outside nested accepted-problem columns and repair misplaced panels",
+    "profile entry: header button combines local data and domain permissions without altering native tabs or columns",
+    "profile entry: independent module switches, absent sidebar and late header leave one reachable button",
     "oier: profile links import all awards and persist the exact ID after saving, including guests",
     "oier: pasting a profile URL reads data, while page text, ranking links and foreign URLs make no requests",
     "oier: refreshing a new database updates only OIerDb fields and immediately saves the bound ID",
@@ -136,16 +142,16 @@
     "oier: quick full pinyin supports polyphonic characters without relying on one initials spelling",
     "oier: quick small candidate choice and expansion survive pagination and fit the dialog"
   ],
-  "checkedAt": "2026-11-18",
-  "node": "v24.22.1",
+  "checkedAt": "2026-11-19",
+  "node": "v24.22.3",
   "packaging": {
-    "version": "2.9.2",
+    "version": "3.0.0",
     "passed": 5,
     "failures": []
   },
   "session": {
-    "version": "2.9.2",
-    "scriptSha256": "49f0f514a4cbbc31e82d356daa35f6a8ef576d4fc0137f06eb741acbabae70cf",
+    "version": "3.0.0",
+    "scriptSha256": "74007b5801f26515fe020ee9588b8519e1913283c0faafd94b56f46484a94ba6",
     "browser": "153.0.8010.0",
     "fixture": "local HTTP server; real HttpOnly cookies; no live OJ account",
     "passed": 6,
@@ -158,7 +164,7 @@
       "session: late responses cannot cross a route or account change before DOM refresh"
     ]
   },
-  "totalPassedLocally": 142,
+  "totalPassedLocally": 148,
   "liveSiteLoginVerified": false,
   "limitations": [
     "Browser checks used Hydro page fixtures and a loopback HTTP session; no live HLOJ account or Tampermonkey sandbox was used."

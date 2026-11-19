@@ -85,6 +85,11 @@ async function openControlCenter(page) {
   else await page.evaluate(() => window.__commands.find(command => command.name === 'Extend HLOJ').fn());
   await page.locator('#exhloj-local-dialog[open]').waitFor();
 }
+async function openProfileInfo(page) {
+  await page.getByRole('button', { name: '用户信息', exact: true }).click();
+  await page.locator('#exhloj-profile-view').waitFor();
+  return page.locator('#exhloj-profile-view');
+}
 async function openSettingsPage(page) { await openControlCenter(page); await panelTab(page, 'settings'); }
 async function openDataPage(page) { await openControlCenter(page); await panelTab(page, 'data'); }
 (async () => {
@@ -107,6 +112,117 @@ async function openDataPage(page) { await openControlCenter(page); await panelTa
     assert.equal(f.requests.length, 1); assert.deepEqual(await page.evaluate(() => window.__gm), []);
     assert.equal(await page.evaluate(() => window.UserContext.bio), '<!-- exhloj: old marker -->');
     await f.done();
+  });
+  function compactRow(id, label, href, attrs = '') {
+    return '<li class="menu__item"><a class="menu__link" id="' + id + '" href="' + href + '" ' + attrs + '><span class="icon"></span>' + label + '</a></li>';
+  }
+  const compactTopics = '<section class="section side section--problem-sidebar"><ol class="menu">' +
+    compactRow('send', '递交', '/d/test/p/P1/submit') + '<li id="separator" class="menu__seperator"></li>' +
+    compactRow('talk-zero', '讨论 (0)', '/discuss/problem/1') + compactRow('solution-zero', '题解 <span>（０）</span>', '/p/P1/solution') + '</ol></section>';
+  const compactContest = '<section class="section side"><ol class="menu">' + compactRow('sim', '代码相似度查询', '/d/test/contest/42/sim') +
+    compactRow('score', '成绩表', '/d/test/contest/42/scoreboard') + compactRow('contest-talk', '讨论', '/discuss/contest/42') + '</ol></section>';
+  const compactNav = '<nav class="nav" id="menu"><ol class="nav__list nav__list--main">' +
+    [['home','首页','/'],['problems','题库','/d/test/p'],['training','训练','/d/test/training/'],['contest','比赛','/contest'],
+     ['homework','作业','/homework'],['discussion','讨论','/d/test/discuss'],['records','评测记录','/d/test/record'],
+     ['rank','排名','/ranking'],['my','我的提交','/record?uid=42']].map(([id, label, href]) =>
+      '<li class="nav__list-item"><a id="nav-' + id + '" class="nav__item" href="' + href + '">' + label + '</a></li>').join('') +
+    '</ol><ol class="nav__list--secondary"><li><a id="other-nav" href="/p">题库</a></li></ol></nav>';
+  const compactPage = { tdoc: { docId: '42', domainId: 'test' }, tsdoc: { uid: 42 }, pdoc: { docId: 1, title: 'Local', content: 'text' } };
+  const compactSettings = { 'exhloj.coreui.settings.v1': { remote: false } };
+  await check('menu visibility: problem, contest and navigation switches persist and restore the native links independently', async () => {
+    const body = compactTopics + compactContest + '<div class="typo"><a id="in-statement" href="/p">题库</a></div>';
+    const options = { storage: compactSettings, path: '/d/test/p/P1?tid=42', extra: compactNav };
+    const f = await fixture('contest_detail_problem', body, compactPage, options), p = f.page;
+    const switches = [['hideEmptyDiscussion','talk-zero'],['hideEmptySolution','solution-zero'],['showUnknownSimilarity','sim'],
+      ['hideNavProblems','nav-problems'],['hideNavTraining','nav-training'],['hideNavDiscussion','nav-discussion'],['hideNavRecords','nav-records']];
+    const snapshot = async () => Promise.all(switches.map(([,id]) => p.locator('#' + id).isVisible()));
+    assert.deepEqual(await snapshot(), switches.map(() => false)); assert.equal(await p.locator('#separator').isVisible(), false);
+    for (const id of ['send','score','contest-talk','nav-home','nav-contest','nav-homework','nav-rank','nav-my','in-statement','other-nav'])
+      assert.equal(await p.locator('#' + id).isVisible(), true, id);
+    await openSettingsPage(p); assert.equal(await p.locator('[name="showUnknownHomeworkSimilarity"]').isChecked(), false);
+    for (const [key] of switches) {
+      const box = p.locator('#exhloj-menu-options [name="' + key + '"]');
+      assert.equal(await box.isChecked(), key !== 'showUnknownSimilarity'); await box.setChecked(key === 'showUnknownSimilarity');
+      // Save one switch at a time. Previously exposed entries remain visible and the other defaults are unchanged.
+      await p.locator('[data-exh-action="save-settings"]').click();
+      assert.deepEqual(await snapshot(), switches.map(([other], j) => j <= switches.findIndex(([k]) => k === key)));
+    }
+    const saved = await p.evaluate(() => window.__store); assert.equal(f.requests.length, 1); await f.done();
+    const g = await fixture('contest_detail_problem', body, compactPage, { ...options, storage: saved });
+    for (const [,id] of switches) assert.equal(await g.page.locator('#' + id).isVisible(), true, id);
+    assert.equal(await g.page.locator('#sim').getAttribute('href'), '/d/test/contest/42/sim'); assert.equal(g.requests.length, 1); await g.done();
+  });
+  await check('menu visibility: zero is explicit, counts and PJAX menus can change, unrelated actions keep their handlers', async () => {
+    const f = await fixture('problem_detail', compactTopics + '<div id="late"></div>', compactPage, { storage: compactSettings, extra: compactNav }), p = f.page;
+    await p.locator('#solution-zero').evaluate(a => { a.textContent = '题解（10）'; });
+    await p.locator('#solution-zero').waitFor(); await p.locator('#talk-zero').evaluate(a => { a.textContent = '讨论'; });
+    await p.locator('#talk-zero').waitFor();
+    await p.locator('#talk-zero').evaluate(a => { a.dataset.count = '0'; }); await p.locator('#talk-zero').waitFor({ state: 'hidden' });
+    await p.locator('#talk-zero').evaluate(a => { a.dataset.count = '1'; a.onclick = e => { e.preventDefault(); a.dataset.clicked = 'yes'; }; });
+    await p.locator('#talk-zero').click(); assert.equal(await p.locator('#talk-zero').getAttribute('data-clicked'), 'yes');
+    await p.evaluate(() => {
+      history.pushState({}, '', '/d/test/p/P2'); document.querySelector('#talk-zero').textContent = '讨论 (0)';
+      const nav = document.querySelector('#nav-problems'); nav.parentNode.replaceChildren(nav.cloneNode(true));
+      window.dispatchEvent(new Event('pjax:end'));
+    }); await p.locator('#talk-zero').waitFor({ state: 'hidden' }); assert.equal(await p.locator('#nav-problems').isVisible(), false);
+    await openSettingsPage(p); await p.locator('[name="ui"]').uncheck(); await p.locator('[data-exh-action="save-settings"]').click();
+    assert.equal(await p.locator('[data-exh-menu-hidden]').count(), 0); assert.equal(f.requests.length, 1); await f.done();
+  });
+  await check('menu visibility: contest similarity requires explicit permission, unknown is manual, known denial always wins', async () => {
+    const f = await fixture('contest_detail', compactContest, { tdoc: { docId: '42', domainId: 'test', owner: 42 }, tsdoc: { uid: 42 } },
+      { path: '/d/test/contest/42', storage: compactSettings }), p = f.page, entry = p.locator('#sim');
+    assert.equal(await entry.isVisible(), false, 'ownership or an active href alone is not a grant');
+    await entry.evaluate(a => { a.dataset.canViewSimilarity = 'true'; }); await entry.waitFor();
+    await entry.evaluate(a => { a.setAttribute('aria-disabled','true'); }); await entry.waitFor({ state: 'hidden' });
+    await openSettingsPage(p); await p.locator('[name="showUnknownSimilarity"]').check(); await p.locator('[data-exh-action="save-settings"]').click();
+    assert.equal(await entry.isVisible(), false); await p.locator('[data-exh-action="close"]').click();
+    await entry.evaluate(a => { a.removeAttribute('aria-disabled'); delete a.dataset.canViewSimilarity; }); await entry.waitFor();
+    await openSettingsPage(p); await p.locator('[name="showUnknownSimilarity"]').uncheck(); await p.locator('[data-exh-action="save-settings"]').click();
+    await p.locator('[data-exh-action="close"]').click(); await entry.waitFor({ state: 'hidden' });
+    await p.evaluate(() => { UiContext.canViewSimilarity = true; document.body.append(document.createElement('div')); });
+    await entry.waitFor();
+    await p.evaluate(() => { window.UserContext._id = 71; document.body.append(document.createElement('div')); });
+    await entry.waitFor({ state: 'hidden' });
+    await p.evaluate(() => { history.pushState({}, '', '/d/test/homework/42'); document.documentElement.dataset.page = 'homework_detail'; window.UiContext.tdoc = { docId: '42', title: 'Homework', files: [] }; window.dispatchEvent(new Event('pjax:end')); });
+    await entry.waitFor({ state: 'hidden' }); assert.equal(f.requests.length, 1); assert.deepEqual(await p.evaluate(() => window.__gm), []); await f.done();
+  });
+  await check('menu visibility: homework similarity is manual when unknown, independent of contest settings, and never overrides denial', async () => {
+    const body = '<section class="section--homework-sidebar"><ol class="menu">' +
+      compactRow('hw-sim','查重报告','/d/test/homework/57/sim') + compactRow('shared-sim','代码相似度查询','/d/test/contest/57/sim') +
+      compactRow('hw-denied','代码查重','/d/test/homework/57/moss','data-permission-status="denied"') +
+      compactRow('hw-scores','成绩表','/d/test/homework/57/scoreboard') + '</ol></section>';
+    const ctx = { tdoc: { docId:'57', domainId:'test', rule:'homework', title:'作业 A', files:[] }, viewerId:42 };
+    const opts = { path:'/d/test/homework/57', storage:{ 'exhloj.coreui.settings.v1':{ remote:false, options:{ showUnknownSimilarity:true } } } };
+    const f = await fixture('homework_detail', body, ctx, opts), p = f.page;
+    const wait = (id,yes) => p.locator('#'+id).waitFor({ state:yes ? 'visible' : 'hidden' });
+    await wait('hw-sim',false); await wait('shared-sim',false); await wait('hw-denied',false); await wait('hw-scores',true);
+    await openSettingsPage(p); await p.locator('[name="showUnknownHomeworkSimilarity"]').check(); await p.locator('[name="showUnknownSimilarity"]').uncheck();
+    await p.locator('[data-exh-action="save-settings"]').click(); await p.locator('[data-exh-action="close"]').click();
+    await wait('hw-sim',true); await wait('shared-sim',true); await wait('hw-denied',false);
+    const saved = await p.evaluate(() => window.__store);
+    await p.locator('#hw-sim').evaluate(a => a.parentElement.title = '权限不足'); await wait('hw-sim',false);
+    await p.evaluate(() => {
+      history.pushState({}, '', '/d/test/contest/57'); document.documentElement.dataset.page = 'contest_detail';
+      window.UiContext.tdoc = {docId:'57',domainId:'test',rule:'oi'};
+      window.dispatchEvent(new Event('pjax:end'));
+    }); await wait('shared-sim',false);
+    assert.equal(f.requests.length,1); assert.deepEqual(await p.evaluate(() => window.__gm),[]); await f.done();
+    const g = await fixture('homework_scoreboard', body, ctx, { ...opts, path:'/d/test/homework/57/scoreboard', storage:saved });
+    await g.page.locator('#hw-sim').waitFor(); await g.page.locator('#hw-denied').waitFor({state:'hidden'}); await g.done();
+  });
+  await check('menu visibility: homework permission must match the viewer, document and domain; lists and standalone problems stay untouched', async () => {
+    const body = '<section class="section--homework-sidebar"><ol class="menu">'+compactRow('hs','代码相似度查询','/d/test/homework/57/sim')+'</ol></section>';
+    const f = await fixture('problem_detail', body, { tdoc:{ docId:'57', domainId:'test', rule:'homework', title:'作业' }, viewerId:42, canViewSimilarity:true },
+      { path:'/d/test/p/P1?tid=57', storage:compactSettings }), p=f.page, entry=p.locator('#hs');
+    await entry.waitFor();
+    await p.evaluate(() => { UiContext.canViewSimilarity=false; document.body.append(document.createElement('i')); }); await entry.waitFor({state:'hidden'});
+    await p.evaluate(() => { history.replaceState({},'', '/d/test/homework/57/scoreboard'); document.documentElement.dataset.page='homework_scoreboard'; UiContext.canViewSimilarity=true; UiContext.viewerId=99; window.dispatchEvent(new Event('pjax:end')); }); await entry.waitFor({state:'hidden'});
+    await p.evaluate(() => { UiContext.viewerId=42; document.body.append(document.createElement('i')); }); await entry.waitFor();
+    await p.evaluate(() => { UiContext.tdoc.domainId='elsewhere'; document.body.append(document.createElement('i')); }); await entry.waitFor({state:'hidden'});
+    await p.evaluate(() => { UiContext.tdoc.domainId='test'; UiContext.tdoc.docId='58'; document.body.append(document.createElement('i')); }); await entry.waitFor({state:'hidden'});
+    await p.evaluate(() => { history.replaceState({},'', '/d/test/homework'); document.documentElement.dataset.page='homework_main'; window.dispatchEvent(new Event('pjax:end')); }); await entry.waitFor();
+    await p.evaluate(() => { history.replaceState({},'', '/d/test/p/P1'); document.documentElement.dataset.page='problem_detail'; window.dispatchEvent(new Event('pjax:end')); }); await entry.waitFor();
+    assert.equal(f.requests.length,1); assert.deepEqual(await p.evaluate(() => window.__gm),[]); await f.done();
   });
   await check('core: save UI switch and preserve ports across reinstall/page load', async () => {
     const f = await fixture('homepage', '');
@@ -318,9 +434,9 @@ async function openDataPage(page) { await openControlCenter(page); await panelTa
     assert.deepEqual(JSON.parse(f.requests[1].data), { avatar: 'url:https://oj.hailiangedu.com/file/42/pic.png' }); await f.done();
   });
   await check('ui: 71-bit permission value and escaped role strings', async () => {
-    const f = await fixture('user_detail', '', { udoc: { perm: `BigInt::${(1n << 70n) | (1n << 67n) | 1n}`, role: '<script>bad</script>' } });
-    assert.match(await f.page.locator('#exhloj-local-permissions').innerText(), /\(3\)/);
-    await f.page.locator('[data-exh-action="permissions"]').click();
+    const f = await fixture('user_detail', '', { udoc: { _id: 7, perm: `BigInt::${(1n << 70n) | (1n << 67n) | 1n}`, role: '<script>bad</script>' } }, { path: '/user/7' });
+    const view = await openProfileInfo(f.page); await view.getByText('拥有权限（3）', { exact: true }).click();
+    assert.match(await view.innerText(), /<script>bad<\/script>/);
     assert.equal(await f.page.locator('#exhloj-local-dialog script').count(), 0);
     assert.equal(await f.page.locator('#exhloj-local-dialog td').filter({ hasText: /^✓$/ }).count(), 3); await f.done();
   });
@@ -1160,11 +1276,11 @@ async function openDataPage(page) { await openControlCenter(page); await panelTa
   });
   await check('user: profile info, prizes, OIerDB, default rating and late profile context', async () => {
     const f = await fixture('user_detail', '<a class="user-profile-name" href="/user/7">七号 (seven)</a>', { udoc: { _id: 7, uname: 'seven' } }, { storage: userStorage(), path: '/user/7' });
-    const card = f.page.locator('#exhloj-local-user-card'); assert.equal(await card.count(), 1); assert.match(await card.textContent(), /用户信息 · 本地资料/); assert.match(await card.textContent(), /NOIP 2026/); assert.match(await card.textContent(), /🥇 一等奖（300 分）/);
+    await openProfileInfo(f.page); const card = f.page.locator('#exhloj-local-user-card'); await card.locator('#exhloj-profile-awards summary').click(); assert.equal(await card.count(), 1); assert.match(await card.textContent(), /本地资料/); assert.match(await card.textContent(), /NOIP 2026/); assert.match(await card.textContent(), /🥇 一等奖（300 分）/);
     assert.equal(await card.locator('a[href="https://oier.baoshuo.dev/oier/1234"]').count(), 1); assert.equal(await card.locator('.exhloj-user-rating').textContent(), '1800');
     await card.locator('[data-exh-action="user-history"]').click(); assert.match(await f.page.locator('#exhloj-local-dialog').textContent(), /最高 1900/); assert.equal(await f.page.locator('#exhloj-local-dialog tr').count(), 3); assert.equal(f.requests.length, 1); await f.done();
-    const g = await fixture('user_detail', '', {}, { path: '/user/99' }); assert.equal(await g.page.locator('#exhloj-local-user-card').count(), 1); assert.equal(await g.page.locator('#exhloj-local-user-card .exhloj-user-rating').textContent(), '1800');
-    await g.page.evaluate(() => { window.UiContext.udoc = { _id: 99, uname: 'new-user' }; document.body.append(document.createElement('div')); }); await g.page.waitForTimeout(250); assert.equal(await g.page.locator('#exhloj-local-user-card').count(), 1); await g.done();
+    const g = await fixture('user_detail', '', {}, { path: '/user/99' }); assert.equal(await g.page.locator('#exhloj-local-user-card').count(), 0); await openProfileInfo(g.page); assert.equal(await g.page.locator('#exhloj-local-user-card .exhloj-user-rating').textContent(), '1800');
+    await g.page.evaluate(() => { window.UiContext.udoc = { _id: 99, uname: 'new-user' }; document.body.append(document.createElement('div')); }); await g.page.getByText(/new-user · UID 99/).waitFor(); assert.equal(await g.page.locator('#exhloj-local-user-card').count(), 1); await g.done();
   });
   await check('user: seven display modes, independent CCF badges, dynamic names and exact disable restoration', async () => {
     const f = await fixture('homepage', '<a id="named" class="user-profile-name" href="/user/7"><em>旧姓名</em> (old)</a>', { udict: { 7: { uname: 'oj-seven' } } }, { storage: userStorage() }); await openWork(f, 'user-open');
@@ -1486,15 +1602,50 @@ async function openDataPage(page) { await openControlCenter(page); await panelTa
     assert.match(await f.page.locator('[data-work-errors="oier"]').textContent(), /编辑内容已变化/); await f.done();
   });
 
-  await check('oier: profile and permission panels are outside nested accepted-problem columns and repair misplaced panels', async () => {
-    const body = '<div class="section" id="profile-section"><div class="profile-header">Profile</div><div class="profile-content"><div id="accepted-problems"><h1>通过的题目</h1><div class="row">' + Array.from({ length: 4 }, (_, i) => `<div class="medium-3 columns"><ul><li>P${i + 1}</li></ul></div>`).join('') + '</div></div></div></div>';
-    for (const missing of [false, true]) {
-      const f = await fixture('user_detail', body, { udoc: { _id: 7, perm: 'BigInt::3' } }, { storage: userStorage(), path: '/user/7', extra: missing ? '<script>document.querySelector(".main > .row > .medium-3.columns").remove()</script>' : '' });
-      assert.equal(await f.page.locator('#accepted-problems #exhloj-local-user-card, #accepted-problems #exhloj-local-permissions').count(), 0);
-      assert.equal(await f.page.locator('.main > .row > .medium-3.columns > #exhloj-local-user-card').count(), 1); assert.equal(await f.page.locator('.main > .row > .medium-3.columns > #exhloj-local-permissions').count(), 1);
-      await f.page.evaluate(() => { const bad = document.querySelector('#accepted-problems .medium-3'); bad.append(document.querySelector('#exhloj-local-user-card'), document.querySelector('#exhloj-local-permissions')); });
-      await f.page.waitForFunction(() => document.querySelector('#exhloj-local-user-card').parentElement.matches('.main > .row > .medium-3.columns') && document.querySelector('#exhloj-local-permissions').parentElement.matches('.main > .row > .medium-3.columns'));
-      assert.equal(await f.page.locator('#accepted-problems .medium-3.columns').count(), 4); assert.equal(f.requests.length, 1); await f.done();
+  await check('profile entry: header button combines local data and domain permissions without altering native tabs or columns', async () => {
+    const contact = '<div class="profile-header__contact-bar"><a id="native-mail" href="#messages">私信</a></div>';
+    const body = '<section class="section"><div class="profile-header"><div class="profile-header__main">' + contact + '</div><nav id="native-tabs"><a href="#accepted-problems">通过的题目</a></nav></div>' +
+      '<div id="accepted-problems"><div class="row"><div class="medium-3 columns">P1</div></div></div></section>';
+    const f = await fixture('user_detail', body, { udoc: { _id: 7, uname: 'seven', perm: 'BigInt::3', role: 'student' } }, { storage: userStorage(), path: '/user/7' });
+    const p = f.page, entry = p.locator('#exhloj-profile-entry');
+    assert.equal(await p.locator('.profile-header__contact-bar > #exhloj-profile-entry').count(), 1);
+    assert.equal(await p.locator('#exhloj-local-user-card,#exhloj-local-permissions,#exhloj-profile-permissions').count(), 0);
+    assert.equal(await p.locator('#native-tabs a').getAttribute('href'), '#accepted-problems');
+    await p.setViewportSize({ width: 375, height: 750 }); const bounds = await entry.boundingBox(); assert.ok(bounds.width < 120 && bounds.height >= 24);
+    await p.locator('#native-mail').click(); assert.match(p.url(), /#messages$/);
+    const view = await openProfileInfo(p);
+    assert.equal(await view.getByRole('heading', { name: '本地资料' }).count(), 1); await view.getByText('拥有权限（2）', { exact: true }).click();
+    assert.equal(await view.locator('td').filter({ hasText: /^✓$/ }).count(), 2); assert.ok(await view.evaluate(node => node.scrollWidth <= node.clientWidth + 1));
+    await p.keyboard.press('Escape'); await view.waitFor({ state: 'detached' });
+    await p.evaluate(() => {
+      const bar = document.querySelector('.profile-header__contact-bar');
+      document.querySelector('#accepted-problems .columns').append(document.querySelector('#exhloj-profile-entry'));
+      const clone = bar.cloneNode(true); bar.replaceWith(clone);
+    });
+    await p.locator('.profile-header__contact-bar > #exhloj-profile-entry').waitFor();
+    assert.equal(await entry.count(), 1); assert.equal(await p.locator('#accepted-problems #exhloj-profile-entry').count(), 0);
+    await openProfileInfo(p);
+    await p.evaluate(() => { history.pushState({}, '', '/user/8'); window.dispatchEvent(new Event('pjax:end')); });
+    await view.waitFor({ state: 'detached' }); await p.locator('#exhloj-profile-entry[data-uid="8"]').waitFor();
+    const next = await openProfileInfo(p);
+    await next.getByText('拥有权限（未知）', { exact: true }).waitFor();
+    assert.ok(!(await next.innerText()).includes('seven')); assert.equal(await next.locator('#exhloj-profile-permissions table').count(), 0);
+    await p.evaluate(() => { window.UiContext.udoc = { _id: 8, uname: 'eight', perm: 0 }; document.body.append(document.createElement('div')); });
+    await next.getByText('拥有权限（0）', { exact: true }).waitFor(); assert.equal(f.requests.length, 1); await f.done();
+  });
+  await check('profile entry: independent module switches, absent sidebar and late header leave one reachable button', async () => {
+    for (const [users, perms, entryOn] of [[false,true,true],[true,false,true],[false,false,true],[true,true,false]]) {
+      const f = await fixture('user_detail', '<div id="native-slot"></div>', { udoc: { _id: 7, perm: 'BigInt::1' } },
+        { path: '/user/7', storage: userStorage({ userModule: users, options: { permissions: perms, profileInfoEntry: entryOn } }), extra: '<script>document.querySelector(".main > .row > .medium-3").remove()</script>' });
+      const p = f.page; assert.equal(await p.locator('#exhloj-profile-entry').count(), entryOn && (users || perms) ? 1 : 0);
+      if (entryOn && (users || perms)) {
+        await p.locator('#native-slot').evaluate(n => { n.innerHTML = '<div class="profile-header"><div class="profile-header__contact-bar"></div></div>'; });
+        await p.locator('.profile-header__contact-bar > #exhloj-profile-entry').waitFor();
+        const view = await openProfileInfo(p);
+        assert.equal(await view.locator('#exhloj-local-user-card').count(), +users);
+        assert.equal(await view.locator('#exhloj-profile-permissions').count(), +perms);
+      }
+      assert.equal(await p.locator('[data-exh-profile-sidebar]').count(), 0); assert.equal(f.requests.length, 1); await f.done();
     }
   });
   await check('oier: profile links import all awards and persist the exact ID after saving, including guests', async () => {
@@ -1618,7 +1769,7 @@ async function openDataPage(page) { await openControlCenter(page); await panelTa
   await check('oier: database text is rendered literally and selected profile refresh works outside the editor', async () => {
     const unsafe = oierResult.replace('WMH,王茂骅', 'WMH,<img src=x onerror=window.injected=1>');
     const f = await fixture('user_detail', '', { udoc: { _id: 7, perm: 'BigInt::1' } }, { path: '/user/7', storage: userStorage(), remote: oierRemotes(oierStatic, unsafe) });
-    await f.page.locator('#exhloj-local-user-card [data-exh-action="user-oier-refresh"]').click(); await finished(f, 'oier');
+    await openProfileInfo(f.page); await f.page.locator('#exhloj-local-user-card [data-exh-action="user-oier-refresh"]').click(); await finished(f, 'oier');
     assert.equal((await savedOIer(f)).oiers[7].name, '<img src=x onerror=window.injected=1>'); assert.equal(await f.page.locator('#exhloj-local-user-card img, #exhloj-local-user-card script').count(), 0); assert.equal(await f.page.evaluate(() => window.injected), undefined);
     assert.equal(f.requests.length, 1); await f.done();
   });
