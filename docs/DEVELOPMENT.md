@@ -61,7 +61,9 @@ npm run package:source:check
 
 ## 发布流程
 
-主分支版本变更、版本标签或手动触发会运行 `release.yml`。工作流先完成全部检查，再使用同次运行的已校验产物创建对应 Release；已有版本不覆盖。
+`release.yml` 是唯一的工作流。PR 和推送到 `main` 都运行一次完整测试。只有这次推送前后 `package.json` 的版本号发生变化，测试通过后才会发布。发布直接使用同一次运行的安装产物，并与该提交的脚本和 ZIP 逐字节比对；已有 Release 不覆盖。
+
+需要补发时，在 Actions → **Test and release** → **Run workflow** 选择 `main`，勾选「补发 main 的当前版本」。不勾选只做检查。发布会自动创建版本标签，单独推标签不触发另一轮测试。
 
 `release-notes.py` 从当前 CHANGELOG 条目生成安装指引和更新说明。发布页仅附安装脚本、离线安装包和校验值；开发者可使用 GitHub 的版本源码下载。源码包仍作为 CI 产物保留。
 

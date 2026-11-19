@@ -13,7 +13,7 @@ ROOT_FILES = (
 )
 SOURCE_DIRS = ('.github', 'src', 'vendor', 'scripts', 'docs', 'tests')
 REQUIRED = (
-    '.github/workflows/test.yml', '.github/workflows/release.yml',
+    '.github/workflows/release.yml',
     'src/exhloj.template.js', 'vendor/markdown-renderer.js', 'vendor/pinyin.js',
     'scripts/build.cjs', 'scripts/package-release.py', 'scripts/package-source.py', 'scripts/release-notes.py',
     'tests/browser.cjs', 'tests/session.cjs', 'tests/package_test.py',

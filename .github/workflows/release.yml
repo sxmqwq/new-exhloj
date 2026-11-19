@@ -1,27 +1,26 @@
-name: Publish release
+name: Test and release
+
 on:
+  pull_request:
   push:
     branches: [main]
-    tags: ['v*']
-    paths: ['package.json', '.github/workflows/release.yml']
   workflow_dispatch:
+    inputs:
+      publish:
+        description: 补发 main 的当前版本（已有 Release 不覆盖）
+        type: boolean
+        default: false
+
 permissions:
   contents: read
-concurrency:
-  group: release-${{ github.repository }}
-  cancel-in-progress: false
+
 jobs:
-  checks:
-    uses: ./.github/workflows/test.yml
-  publish:
-    needs: checks
+  test:
     runs-on: ubuntu-24.04
-    permissions:
-      contents: write
-      actions: read
-    env:
-      GH_TOKEN: ${{ github.token }}
-      GH_REPO: ${{ github.repository }}
+    timeout-minutes: 15
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+      release: ${{ steps.plan.outputs.release }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -29,41 +28,101 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version-file: '.node-version'
-      - name: Check version
-        id: version
+      - name: Determine version and release intent
+        id: plan
+        shell: bash
+        env:
+          BEFORE: ${{ github.event.before }}
+          MANUAL_PUBLISH: ${{ inputs.publish }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          VERSION=$(node -p 'require("./package.json").version')
-          TAG="v$VERSION"
-          if [ "$GITHUB_REF_TYPE" = tag ]; then
-            test "$GITHUB_REF_NAME" = "$TAG"
-          else
-            test "$GITHUB_REF_NAME" = main
+          version=$(jq -er '.version | strings' package.json)
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]
+          release=false
+          if [[ "$GITHUB_REF" == refs/heads/main ]]; then
+            if [[ "$GITHUB_EVENT_NAME" == push && "$BEFORE" =~ ^[0-9a-f]{40}$ && ! "$BEFORE" =~ ^0+$ ]]; then
+              previous=$(gh api -H 'Accept: application/vnd.github.raw+json' \
+                "repos/$GITHUB_REPOSITORY/contents/package.json?ref=$BEFORE" | jq -er '.version | strings')
+              if [[ "$previous" != "$version" ]]; then release=true; fi
+            elif [[ "$GITHUB_EVENT_NAME" == workflow_dispatch && "$MANUAL_PUBLISH" == true ]]; then
+              release=true
+            fi
           fi
-          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-          echo "TAG=$TAG" >> "$GITHUB_ENV"
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-          fi
-      - name: Download verified packages
-        if: steps.version.outputs.exists != 'true'
+          printf 'version=%s\nrelease=%s\n' "$version" "$release" >> "$GITHUB_OUTPUT"
+      - run: npm ci --ignore-scripts
+      - run: npm run check
+      - run: npm run package:check
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
+      - name: Stage and verify installation and source packages
         run: |
+          python3 scripts/package-source.py
+          python3 scripts/package-source.py --check
+      - uses: actions/upload-artifact@v6
+        with:
+          name: exhloj-${{ steps.plan.outputs.version }}-install
+          if-no-files-found: error
+          path: |
+            artifacts/exhloj-${{ steps.plan.outputs.version }}-install.zip
+            artifacts/exhloj-${{ steps.plan.outputs.version }}.user.js
+            artifacts/VERSION.txt
+            artifacts/SHA256SUMS
+      - uses: actions/upload-artifact@v6
+        with:
+          name: exhloj-${{ steps.plan.outputs.version }}-source
+          if-no-files-found: error
+          path: |
+            artifacts/exhloj-${{ steps.plan.outputs.version }}-source.zip
+            artifacts/SHA256SUMS
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: exhloj-test-results
+          if-no-files-found: warn
+          path: tests/output/
+
+  publish:
+    needs: test
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish)) &&
+      needs.test.outputs.release == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      actions: read
+    concurrency:
+      group: release-${{ github.repository }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Publish the tested installation
+        shell: bash
+        env:
+          VERSION: ${{ needs.test.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          tag="v$VERSION"
+          published=$(gh api --paginate "repos/$GH_REPO/releases?per_page=100" --jq '.[].tag_name')
+          if grep -Fxq -- "$tag" <<< "$published"; then echo "$tag already has a release."; exit 0; fi
+          current=$(gh api -H 'Accept: application/vnd.github.raw+json' \
+            "repos/$GH_REPO/contents/package.json?ref=main" | jq -er '.version | strings')
+          if [[ "$VERSION" != "$current" ]]; then echo "main now points to version $current; skipping $tag."; exit 0; fi
+          refs=$(gh api "repos/$GH_REPO/git/matching-refs/tags/$tag" --jq '.[].ref')
+          if grep -Fxq -- "refs/tags/$tag" <<< "$refs"; then
+            tagged=$(gh api "repos/$GH_REPO/commits/refs/tags/$tag" --jq .sha)
+            if [[ "$tagged" != "$GITHUB_SHA" ]]; then echo "::error::$tag points to another commit"; exit 1; fi
+          fi
           gh run download "$GITHUB_RUN_ID" --name "exhloj-$VERSION-install" --dir artifacts
-          gh run download "$GITHUB_RUN_ID" --name "exhloj-$VERSION-source" --dir source-artifact
-          cmp artifacts/SHA256SUMS source-artifact/SHA256SUMS
-          cp "source-artifact/exhloj-$VERSION-source.zip" artifacts/
-      - name: Prepare release notes
-        if: steps.version.outputs.exists != 'true'
-        run: python3 scripts/release-notes.py --repository "$GH_REPO" --output "$RUNNER_TEMP/release-notes.md"
-      - name: Publish installation files
-        if: steps.version.outputs.exists != 'true'
-        working-directory: artifacts
-        run: |
-          sha256sum --check SHA256SUMS
-          cp "exhloj-$VERSION.user.js" exhloj.user.js
-          sha256sum exhloj.user.js "exhloj-$VERSION-install.zip" > release-checksums.txt
-          mv release-checksums.txt SHA256SUMS
-          gh release create "$TAG" --target "$GITHUB_SHA" --latest \
+          cmp dist/exhloj.user.js "artifacts/exhloj-$VERSION.user.js"
+          cmp "release/exhloj-$VERSION.zip" "artifacts/exhloj-$VERSION-install.zip"
+          python3 scripts/release-notes.py --repository "$GH_REPO" --output "$RUNNER_TEMP/release-notes.md"
+          cd artifacts
+          mv "exhloj-$VERSION.user.js" exhloj.user.js
+          sha256sum exhloj.user.js "exhloj-$VERSION-install.zip" > SHA256SUMS
+          gh release create "$tag" --target "$GITHUB_SHA" --latest \
             --title "Extend HLOJ $VERSION" --notes-file "$RUNNER_TEMP/release-notes.md" \
             exhloj.user.js "exhloj-$VERSION-install.zip" SHA256SUMS

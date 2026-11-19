@@ -29,7 +29,7 @@ class SourcePackageTests(unittest.TestCase):
             target.write_bytes(content)
         self.source = self.root / f'artifacts/exhloj-{self.version}-source.zip'
 
-    def test_complete_reproducible_archive_includes_workflows_and_current_release(self):
+    def test_complete_reproducible_archive_includes_workflow_and_current_release(self):
         # A local output, obsolete archive or git credential must never leak into the source ZIP.
         for name in ('tests/output/private.txt', 'release/exhloj-0.0.0.zip', '.git/config'):
             target = self.root / name
@@ -50,7 +50,7 @@ class SourcePackageTests(unittest.TestCase):
             self.assertNotIn('.git/config', names)
 
     def test_missing_workflow_is_rejected(self):
-        (self.root / '.github/workflows/test.yml').unlink()
+        (self.root / '.github/workflows/release.yml').unlink()
         with self.assertRaisesRegex(ValueError, 'Missing required'):
             package.stage(self.root)
 
