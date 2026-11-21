@@ -241,7 +241,7 @@ async function openDataPage(page) { await openControlCenter(page); await panelTa
     assert.equal(await f.page.locator('[data-exh-work-menu]').count(), 0); assert.equal(await f.page.locator('.exhloj-local-menu').count(), 1);
     assert.equal(await f.page.locator('#menu-nav-user a[href="/user/logout"]').count(), 1);
     await f.page.locator('.exhloj-local-menu a').click(); assert.equal(await f.page.locator('#exhloj-local-dialog').getAttribute('data-panel-section'), 'home');
-    assert.equal(await f.page.locator('.exhloj-panel-card').count(), 6); assert.equal(await f.page.locator('.exhloj-panel-nav button').count(), 7);
+    assert.equal(await f.page.locator('.exhloj-panel-card').count(), 6); assert.equal(await f.page.locator('.exhloj-panel-nav button').count(), 8);
     assert.deepEqual(await f.page.evaluate(() => window.__commands.map(x => x.name)), ['Extend HLOJ']);
     assert.equal(f.requests.length, 1); assert.deepEqual(await f.page.evaluate(() => window.__gm), []); await f.done();
   });
@@ -250,11 +250,50 @@ async function openDataPage(page) { await openControlCenter(page); await panelTa
     await f.page.locator('[data-exh-action="contest-helper"]').click(); assert.equal(await f.page.locator('#exhloj-contest-form').count(), 1);
     await f.page.locator('[data-exh-action="panel-attend"]').click(); assert.equal(await f.page.locator('#exhloj-attend-options').evaluate(node => node.open), true);
     assert.equal(await f.page.locator('[name="autoAttendTargets"]').isVisible(), true);
-    for (const [tab, selector] of [['juan', '#exhloj-juan-form'], ['user', '#exhloj-user-options'], ['remote', '#exhloj-luogu-id'], ['settings', '#exhloj-local-settings'], ['data', '#exhloj-local-import'], ['home', '.exhloj-panel-grid']]) {
+    for (const [tab, selector] of [['juan', '#exhloj-juan-form'], ['user', '#exhloj-user-options'], ['ranking', '#exhloj-ranking-options'], ['remote', '#exhloj-luogu-id'], ['settings', '#exhloj-local-settings'], ['data', '#exhloj-local-import'], ['home', '.exhloj-panel-grid']]) {
       await panelTab(f.page, tab); assert.equal(await f.page.locator(selector).count(), 1); assert.equal(await f.page.locator('dialog').count(), 1);
       assert.equal(await f.page.locator('.exhloj-panel-nav [aria-current="page"]').getAttribute('data-panel-tab'), tab);
     }
     assert.equal(f.requests.length, 1); assert.deepEqual(await f.page.evaluate(() => window.__gm), []); assert.deepEqual(await f.page.evaluate(() => window.__store), {}); await f.done();
+  });
+  await check('ranking layout: align and hide switches are independent across Hydro sticky tables, pagination and navigation', async () => {
+    const columns = ['rank', 'user', 'rp', 'detail', 'detail', 'ac', 'bio'];
+    const cg = '<colgroup>' + columns.map(key => '<col class="col--' + key + '">').join('') + '</colgroup>';
+    const row = (tag, values) => '<tr>' + columns.map((key,i) => '<' + tag + ' class="col--' + key + '">' + values[i] + '</' + tag + '>').join('') + '</tr>';
+    const native = '<style>.data-table{width:100%;table-layout:fixed;border-collapse:collapse}.col--rank,.col--detail,.col--ac{width:50px;text-align:center}.col--rp{width:60px;text-align:right}.col--user{width:280px}.col--bio{text-align:left}@media(max-width:600px){.col--detail,.col--bio{display:none}}</style>';
+    const tables = '<div class="section__table-container"><table class="data-table section__table-header">' + cg + '<thead>' +
+      row('th',['排名','用户名','RP','题目','比赛','通过','个人简介']) + '</thead></table><table class="data-table">' + cg + '<tbody>' +
+      row('td',[1,'User',100,10,20,30,'简介文字']) + '</tbody></table></div>';
+    const f = await fixture('ranking', native + '<div data-fragment-id="ranking">' + tables + '</div><table id="other"><tr><td class="col--bio">other</td></tr></table>', {}, { path: '/d/test/ranking' }), p = f.page;
+    const field = name => p.locator('#exhloj-ranking-options [name="' + name + '"]');
+    const cell = (tag, key) => p.locator('[data-fragment-id="ranking"] ' + tag + '.col--' + key).first();
+    const x = el => el.evaluate(node => node.getBoundingClientRect().x);
+    const initial = await x(cell('td','rp'));
+    await openControlCenter(p); await panelTab(p, 'ranking');
+    assert.ok(!await field('rankingAlignLeft').isChecked() && !await field('rankingHideBio').isChecked());
+    await field('rankingAlignLeft').check();
+    assert.equal(await cell('th','rp').evaluate(n => getComputedStyle(n).textAlign), 'left');
+    assert.ok(await x(cell('td','rp')) < initial - 30, 'the stats move toward the username');
+    assert.equal(await cell('td','bio').isVisible(), true);
+    await field('rankingHideBio').check();
+    assert.equal(await cell('th','bio').isVisible(), false); assert.equal(await cell('td','bio').isVisible(), false);
+    for (const key of ['rp','detail','ac']) assert.ok(Math.abs(await x(cell('th',key)) - await x(cell('td',key))) < 1);
+    assert.ok(await x(cell('td','rp')) < initial - 30, 'hiding the bio must not stretch the username column');
+    assert.equal(await p.locator('#other td').isVisible(), true);
+    await field('rankingAlignLeft').uncheck();
+    assert.equal(await cell('td','rp').evaluate(n => getComputedStyle(n).textAlign), 'right');
+    assert.equal(await cell('td','bio').isVisible(), false);
+    await field('rankingAlignLeft').check();
+    await panelTab(p, 'settings'); await p.locator('[data-exh-action="save-settings"]').click(); await p.locator('[data-exh-action="close"]').click();
+    const saved = await p.evaluate(() => JSON.parse(window.__store['exhloj.coreui.settings.v1']).options);
+    assert.ok(saved.rankingHideBio && saved.rankingAlignLeft, 'the general settings form keeps ranking preferences');
+    await p.evaluate(html => { document.querySelector('[data-fragment-id="ranking"]').innerHTML = html; history.pushState({}, '', '?page=2'); window.dispatchEvent(new Event('pjax:end')); }, tables);
+    assert.equal(await cell('td','bio').isVisible(), false);
+    await p.setViewportSize({ width: 430, height: 800 }); assert.equal(await cell('td','detail').isVisible(), false);
+    await p.setViewportSize({ width: 1280, height: 800 });
+    await p.evaluate(() => { history.pushState({}, '', '/d/test/contest/42/scoreboard'); document.documentElement.dataset.page = 'contest_scoreboard'; window.dispatchEvent(new Event('pjax:end')); });
+    await cell('td','bio').waitFor(); assert.equal(await cell('td','rp').evaluate(n => getComputedStyle(n).textAlign), 'right');
+    assert.equal(f.requests.length, 1); await f.done();
   });
   await check('panel: disabled tools can be enabled in settings and the dashboard fits desktop and mobile', async () => {
     const f = await fixture('homepage', '', {}, { storage: { 'exhloj.coreui.settings.v1': { contestHelper: false } } });

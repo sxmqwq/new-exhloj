@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Extend HLOJ
 // @namespace    exhloj-local
-// @version      3.0.0
+// @version      3.1.0
 // @description  HLOJ 训练助手：题源与难度、比赛、练习统计、用户资料和 Rating。
 // @homepageURL  https://github.com/sxmqwq/new-exhloj
 // @supportURL   https://github.com/sxmqwq/new-exhloj/issues
@@ -54,9 +54,9 @@
   if (!(location.hostname === 'oj.hailiangedu.com' ||
       location.host === 'www.nfls.com.cn:10611' || /(^|\.)oifha\.com$/.test(location.hostname))) return;
   if (document.documentElement.dataset.exhlojCoreUi) return;
-  document.documentElement.dataset.exhlojCoreUi = '3.0.0';
+  document.documentElement.dataset.exhlojCoreUi = '3.1.0';
 
-  const VERSION = '3.0.0';
+  const VERSION = '3.1.0';
   const SETTINGS_KEY = 'exhloj.coreui.settings.v1';
   const CACHE_KEY = 'exhloj.coreui.cache.v1';
   const CAPTCHA_KEY = 'exhloj.local.captcha.history';
@@ -72,15 +72,19 @@
     hideNavDiscussion: ['隐藏讨论', true], hideNavRecords: ['隐藏评测记录', true],
     profileInfoEntry: ['显示「用户信息」入口', true],
   };
+  const RANKING_OPTIONS = {
+    rankingAlignLeft: ['右侧统计信息靠左排列', false],
+    rankingHideBio: ['隐藏个人简介', false],
+  };
   const OPTIONS = {
     rounded: ['卡片圆角与布局', true], homework: ['作业标题与附件', true],
     scoreboard: ['榜单奖牌、标题链接与最早提交标记', true],
     markdown: ['复制题面 / 题解 Markdown', true], cph: ['发送到 CPH', true], editor: ['发送到 CP Editor', true],
     avatar: ['头像链接设置入口', true], permissions: ['查看用户权限', true],
     cleanMenu: ['隐藏失效菜单链接', true],
-    ...MENU_OPTIONS,
+    ...MENU_OPTIONS, ...RANKING_OPTIONS,
   };
-  const DEFAULTS = { ui: true, captcha: true, remote: true, contestHelper: true, juanMonitor: true,
+  const DEFAULTS = { ui: true, captcha: true, remote: true, contestHelper: true, homeworkPlanner: true, juanMonitor: true,
     userModule: true, userDisplay: 'no-change', userCCF: false,
     helperDelay: 250, helperPageLimit: 100, helperRequestLimit: 2000, contestFiles: true, contestDetails: false,
     autoAttend: false, autoAttendInterval: 60, autoAttendTargets: '', autoAttendTitle: '', autoAttendRules: '',
@@ -103,7 +107,7 @@
   function normalizeSettings(value) {
     if (!isObject(value)) throw new Error('设置必须是 JSON 对象');
     const result = clone(DEFAULTS);
-    for (const key of ['ui', 'captcha', 'remote', 'captchaHide', 'captchaRemember', 'remoteAuto', 'contestHelper', 'juanMonitor',
+    for (const key of ['ui', 'captcha', 'remote', 'captchaHide', 'captchaRemember', 'remoteAuto', 'contestHelper', 'homeworkPlanner', 'juanMonitor',
       'contestFiles', 'contestDetails', 'autoAttend', 'juanRecords', 'juanContests', 'juanHomeworks', 'userModule', 'userCCF']) {
       if (typeof value[key] === 'boolean') result[key] = value[key];
     }
@@ -194,6 +198,9 @@
   });
 
   const baseStyle = el('style', { id: 'exhloj-local-style' });
+  // Hydro moves the sticky heading and its cloned colgroup into a second table.
+  const rankingTable = ':is([data-fragment-id="ranking"] table.data-table,.main table.data-table:has(>colgroup>col.col--rp)):not(.col--bio *)';
+  const rankingCells = `:is(${rankingTable}>colgroup,${rankingTable}>:is(thead,tbody)>tr)>`;
   baseStyle.textContent = `
     #exhloj-local-toast{position:fixed;bottom:25px;left:50%;transform:translateX(-50%);z-index:2147483647;
       background:#234537;color:white;padding:12px 20px;border-radius:8px;max-width:90vw;box-shadow:0 4px 20px #0003}
@@ -222,6 +229,11 @@
     @media(max-width:520px){#exhloj-local-dialog header{padding:14px 16px}#exhloj-local-dialog .exhloj-dialog-body{padding:10px 16px 18px}.exhloj-panel-grid{grid-template-columns:1fr;gap:9px}.exhloj-panel-nav{padding:0 12px 9px}#exhloj-local-dialog .exhloj-panel-tab{padding:6px 10px}}
     #exhloj-local-dialog label{display:block;margin:9px 0}#exhloj-local-dialog input[type=checkbox]{margin-right:9px}
     [data-exh-menu-hidden]{display:none!important}
+    html.exhloj-ranking-left ${rankingCells}.col--user{width:clamp(7rem,17vw,11rem)!important}
+    html.exhloj-ranking-left ${rankingCells}:is(.col--rp,.col--detail,.col--ac,.col--bio){text-align:left!important}
+    html.exhloj-ranking-no-bio ${rankingCells}.col--bio{display:none!important}
+    html.exhloj-ranking-left.exhloj-ranking-no-bio ${rankingCells}.col--ac{width:auto!important}
+    @media(max-width:600px){html.exhloj-ranking-left ${rankingCells}.col--ac{width:auto!important}}
     #exhloj-profile-entry{display:inline-flex;align-items:center;vertical-align:middle;box-sizing:border-box;width:auto;min-height:28px;margin:2px 4px;padding:2px 10px;border:1px solid #cbd8e2;border-radius:5px;background:#eff5f8;color:#284e69;font:inherit;font-size:13px;line-height:1.4;white-space:nowrap;cursor:pointer}
     .profile-header #exhloj-profile-entry{background:#263a5266;color:white;border-color:#ffffff9c}
     #exhloj-profile-entry:focus-visible{outline:2px solid currentColor;outline-offset:2px}
@@ -292,6 +304,12 @@
     .exhloj-remote-article pre{overflow:auto;white-space:pre}.exhloj-remote-article img{max-width:100%}
     .exhloj-work-progress{padding:8px 12px;background:#eef5fb;border-radius:6px;white-space:pre-wrap;overflow-wrap:anywhere}
     .exhloj-work-results{overflow:auto;max-height:45vh}.exhloj-work-results table{min-width:500px}
+    #exhloj-homework-plan-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,11rem),1fr));gap:8px 12px;align-items:end;margin:12px 0}
+    #exhloj-local-dialog #exhloj-homework-plan-form label{margin:0}
+    #exhloj-homework-plan-form input{display:block;width:100%;min-width:0;box-sizing:border-box;padding:5px 8px;font:inherit;color:inherit;background:white;border:1px solid #b5bfca;border-radius:5px}
+    #exhloj-homework-plan-scan{grid-column:1}
+    #exhloj-homework-plan-results th,#exhloj-homework-plan-results td{text-align:left;vertical-align:top;padding:5px 8px}
+    #exhloj-homework-plan-results td:nth-child(2){font-variant-numeric:tabular-nums}
     .exhloj-oier-option{padding:8px 0;border-bottom:1px solid #ddd}.exhloj-oier-option p{margin:3px 0}
     .exhloj-work-errors{color:#9a3939;white-space:pre-wrap;max-height:150px;overflow:auto}
     #exhloj-local-dialog .exhloj-remote-article textarea{height:180px}
@@ -310,7 +328,7 @@
   `;
   document.head.append(baseStyle);
 
-  const PANEL_SECTIONS = [['home', '首页'], ['contest', '比赛'], ['juan', '卷王'], ['user', '用户'], ['remote', '题源'], ['settings', '设置'], ['data', '数据']];
+  const PANEL_SECTIONS = [['home', '首页'], ['contest', '比赛'], ['juan', '卷王'], ['user', '用户'], ['ranking', '排名页'], ['remote', '题源'], ['settings', '设置'], ['data', '数据']];
   let panelSection = 'home';
   function modal(title, section = panelSection) {
     $('#exhloj-local-dialog')?.close();
@@ -330,13 +348,33 @@
   }
   function openPanelSection(section) {
     if (!PANEL_SECTIONS.some(row => row[0] === section)) return;
-    const module = { contest: 'contestHelper', juan: 'juanMonitor', user: 'userModule', remote: 'remote' }[section];
+    const module = { contest: 'contestHelper', juan: 'juanMonitor', user: 'userModule', ranking: 'ui', remote: 'remote' }[section];
     if (module && !settings[module]) {
       const body = modal(PANEL_SECTIONS.find(row => row[0] === section)[1], section);
       body.append(el('p', {}, '此功能已关闭，可在设置中开启。'), button('打开设置', 'panel-settings')); return;
     }
-    const open = { home: openHome, contest: openContestHelper, juan: openJuanMonitor, user: openUserTools, remote: openRemoteTools, settings: openSettings, data: openDataTools }[section];
+    const open = { home: openHome, contest: openContestHelper, juan: openJuanMonitor, user: openUserTools, ranking: openRankingOptions, remote: openRemoteTools, settings: openSettings, data: openDataTools }[section];
     if (open) open();
+  }
+  function syncRankingLayout() {
+    const here = /^(?:\/d\/[^/]+)?\/ranking\/?$/.test(location.pathname) && (!pageName() || pageName() === 'ranking');
+    const classes = document.documentElement.classList;
+    classes.toggle('exhloj-ranking-left', here && enabled('rankingAlignLeft'));
+    classes.toggle('exhloj-ranking-no-bio', here && enabled('rankingHideBio'));
+  }
+  function openRankingOptions() {
+    const body = modal('排名页', 'ranking'), group = el('fieldset', { id: 'exhloj-ranking-options' });
+    group.append(el('legend', {}, '域排名表'));
+    for (const [key, [title]] of Object.entries(RANKING_OPTIONS)) {
+      const label = el('label'), input = el('input', { type: 'checkbox', name: key });
+      input.checked = settings.options[key]; label.append(input, title); group.append(label);
+      input.addEventListener('change', () => task(() => {
+        const next = { ...settings, options: { ...settings.options, [key]: input.checked } };
+        try { save(SETTINGS_KEY, next); } catch (error) { input.checked = settings.options[key]; throw error; }
+        settings = next; syncRankingLayout();
+      }));
+    }
+    body.append(group, el('p', {}, '左对齐会把 RP、题目、比赛和通过数排在用户名旁边。修改立即生效。'));
   }
   function openHome() {
     const body = modal('控制面板', 'home'), store = userStore();
@@ -414,7 +452,7 @@
     const moduleInput = el('input', { type: 'checkbox', name: 'ui' }); moduleInput.checked = settings.ui;
     moduleLabel.append(moduleInput, '界面增强'); form.append(moduleLabel);
     for (const [key, [text]] of Object.entries(OPTIONS)) {
-      if (key === 'cph' || key === 'editor' || Object.hasOwn(MENU_OPTIONS, key)) continue;
+      if (key === 'cph' || key === 'editor' || Object.hasOwn(MENU_OPTIONS, key) || Object.hasOwn(RANKING_OPTIONS, key)) continue;
       const label = el('label'), input = el('input', { type: 'checkbox', name: key });
       input.checked = settings.options[key]; label.append(input, text); form.append(label);
     }
@@ -442,7 +480,7 @@
     for (const [key, text] of [['captcha', '验证码识别'], ['captchaHide', '识别成功后折叠验证码'],
       ['captchaRemember', '识别成功后勾选“记住我”'], ['remote', '题源与题解'],
       ['remoteAuto', '自动读取已识别题目的难度（缓存 24 小时）'],
-      ['contestHelper', '比赛助手'], ['juanMonitor', '卷王监视器'], ['userModule', '用户资料与 Rating']]) {
+      ['contestHelper', '比赛助手'], ['homeworkPlanner', '作业补题计划'], ['juanMonitor', '卷王监视器'], ['userModule', '用户资料与 Rating']]) {
       const label = el('label'), input = el('input', { type: 'checkbox', name: key });
       input.checked = settings[key]; label.append(input, text); form.append(label);
     }
@@ -511,7 +549,7 @@
     return content;
   }
 
-  let route = location.href, routeOwner = String(user()._id || 0), routeName = pageName();
+  let route = location.href, routeOwner = String(user()._id || 0), routeName = pageName(), routeDomain = domainId();
   let routeEpoch = 0, contextBody = {}, pageRequest, lastPageError = '';
   function current(name) { syncPageContext(); return contextBody[name] ?? ui()[name]; }
   async function requestJSON(path = location.href, options = {}) {
@@ -779,14 +817,15 @@
         note = remoteState.origin?.type === 'none' ? '已停用此题的自动题源识别' : remoteState.messages.join('；');
       } else if (settings.remote && hiddenContestSource() && settings.remoteContest === 'shortcut') note = '按 Ctrl+Q 显示比赛题源';
       if (settings.ui && groups.some(group => group.length)) groups.push([['编辑器设置', 'editor-settings']]);
-    } else if (['contest_main', 'contest_detail', 'contest_scoreboard', 'homework_detail', 'homework_scoreboard'].includes(name)) {
+    } else if (['contest_main', 'contest_detail', 'contest_scoreboard', 'homework_main', 'homework_detail', 'homework_scoreboard'].includes(name)) {
       label = name.startsWith('homework') ? '作业工具' : '比赛工具';
+      if (name === 'homework_main' && settings.homeworkPlanner) groups.push([['补题计划', 'homework-plan-open']]);
       if (settings.userModule && name.startsWith('contest')) {
         const rating = [], target = contestContext();
         if (name !== 'contest_main' && ratedContestPath(target.domain + '/' + target.id, false)) rating.push(['加入 Rating 并结算', 'user-rate-current']);
         groups.push([...rating, ['时间轴结算', 'user-timeline'], ['Rating 记录与命令', 'user-rated']]);
       }
-      if (settings.contestHelper && name !== 'contest_main') groups.push([[name.startsWith('homework') ? '作业助手' : '比赛助手', 'contest-helper']]);
+      if (settings.contestHelper && !name.endsWith('_main')) groups.push([[name.startsWith('homework') ? '作业助手' : '比赛助手', 'contest-helper']]);
     }
     return { label, groups: groups.filter(group => group.length), note, view };
   }
@@ -1750,7 +1789,7 @@
 
 
   // contest-helper / juan-monitor 共用串行请求、进度与取消控制。
-  const workStates = { contest: {}, juan: {}, auto: {}, user: {}, oier: {} }, workJobs = new Map();
+  const workStates = { contest: {}, juan: {}, auto: {}, user: {}, oier: {}, planner: {} }, workJobs = new Map();
   const SNAPSHOT_KEY = 'exhloj.local.juan.snapshots.v1', ATTEND_KEY = 'exhloj.local.attended.v1';
   const VERDICTS = { 0: 'Waiting', 1: 'Accepted', 2: 'Wrong Answer', 3: 'Time Limit Exceeded', 4: 'Memory Limit Exceeded',
     5: 'Output Limit Exceeded', 6: 'Runtime Error', 7: 'Compile Error', 8: 'System Error', 9: 'Cancelled', 20: 'Running', 21: 'Compiling', 30: 'Ignored' };
@@ -1759,6 +1798,8 @@
   function checkJob(job, requesting = false) {
     if (job.controller.signal.aborted) throw workError('任务已取消');
     if (job.owner !== +user()._id) throw workError('登录账号已变化，任务停止');
+    if (job.kind === 'planner' && (!settings.homeworkPlanner || job.epoch !== routeEpoch || job.address !== location.href ||
+        job.domain !== domainId() || pageName() !== 'homework_main')) throw workError('作业页面或账号已变化，请重新查找');
     if (job.kind === 'user' && (job.epoch !== routeEpoch || job.address !== location.href || job.pageName !== pageName())) throw workError('页面已变化，请重新开始结算');
     if (requesting && job.count >= job.limit) throw workError(`达到 ${job.limit} 次请求上限；本次结果不完整`, true);
   }
@@ -1812,11 +1853,11 @@
     });
   }
   async function runWork(kind, fn, local = false) {
-    if (kind === 'user') syncPageContext();
+    if (kind === 'user' || kind === 'planner') syncPageContext();
     if (workJobs.has(kind)) throw workError('此模块已有任务运行，请等待或取消');
     if (!local && !(+user()._id > 0)) throw workError('请先登录 OJ');
     const state = workStates[kind], job = { kind, count: 0, limit: settings.helperRequestLimit,
-      delay: settings.helperDelay, owner: +user()._id, epoch: routeEpoch, address: location.href, pageName: pageName(), controller: new AbortController() };
+      delay: settings.helperDelay, owner: +user()._id, domain: domainId(), epoch: routeEpoch, address: location.href, pageName: pageName(), controller: new AbortController() };
     workJobs.set(kind, job); Object.assign(state, { kind, job, running: true, status: '', message: '', errors: [] }); updateWorkProgress(kind);
     try { return await fn(job, state); }
     catch (error) {
@@ -2005,6 +2046,7 @@
   function openContestHelper() {
     if (!settings.contestHelper) throw workError('请先启用 contest-helper');
     const context = contestContext(), body = modal(context.kind === 'homework' ? '作业助手' : '比赛助手', 'contest'), form = el('form', { id: 'exhloj-contest-form' });
+    if (pageName() === 'homework_main' && settings.homeworkPlanner) body.append(button('补题计划', 'homework-plan-open'));
     for (const [name, title, value] of [['domain', '域 ID', context.domain], ['tid', '比赛 / 作业 ID', context.id]]) {
       const label = el('label', {}, title + ' '); label.append(el('input', { type: 'text', name, value, required: true })); form.append(label);
     }
@@ -3608,13 +3650,13 @@
         case 'save-settings': {
           const form = $('#exhloj-local-settings');
           if (!form.reportValidity()) return;
-          const value = { ...settings, ui: form.elements.ui.checked, options: {} };
+          const value = { ...settings, ui: form.elements.ui.checked, options: { ...settings.options } };
           for (const key of ['cphPort', 'editorPort']) if (!form.elements[key].disabled) value[key] = +form.elements[key].value;
-          for (const key of ['captcha', 'remote', 'captchaHide', 'captchaRemember', 'remoteAuto', 'contestHelper', 'juanMonitor', 'autoAttend', 'userModule']) value[key] = form.elements[key].checked;
+          for (const key of ['captcha', 'remote', 'captchaHide', 'captchaRemember', 'remoteAuto', 'contestHelper', 'homeworkPlanner', 'juanMonitor', 'autoAttend', 'userModule']) value[key] = form.elements[key].checked;
           for (const key of ['helperDelay', 'helperPageLimit', 'helperRequestLimit', 'autoAttendInterval']) value[key] = +form.elements[key].value;
           for (const key of ['autoAttendTargets', 'autoAttendTitle', 'autoAttendRules']) value[key] = form.elements[key].value;
           value.remoteContest = form.elements.remoteContest.value; value.remoteColor = form.elements.remoteColor.value;
-          for (const key of Object.keys(OPTIONS)) value.options[key] = form.elements[key].checked;
+          for (const key of Object.keys(OPTIONS)) if (!Object.hasOwn(RANKING_OPTIONS, key)) value.options[key] = form.elements[key].checked;
           const next = normalizeSettings(value); save(SETTINGS_KEY, next); settings = next;
           refresh();
           notify('设置已保存，刷新页面后完整生效'); break;
@@ -3713,6 +3755,7 @@
         case 'remote-copy-solution': await copyText(stateFor(control).solutions[+control.dataset.index]?.content); break;
         case 'remote-code': await loadSubmissionCode(control); break;
         case 'contest-helper': openContestHelper(); break;
+        case 'homework-plan-open': if (pageName() === 'homework_main' && settings.homeworkPlanner) openHomeworkPlanner(); break;
         case 'contest-statements': await exportContestStatements(contestInput()); break;
         case 'contest-records-csv': await exportContestRecords(contestInput(), 'csv'); break;
         case 'contest-records-json': await exportContestRecords(contestInput(), 'json'); break;
@@ -3754,12 +3797,21 @@
     }
   });
 
+  /* @EXHLOJ_HOMEWORK_PLAN@ */
+
+  function abandonPlannerView() {
+    workJobs.get('planner')?.controller.abort();
+    workStates.planner = {};
+    const dialog = $('dialog[data-exh-homework-plan]');
+    if (dialog) { dialog.close(); dialog.remove(); }
+  }
   function syncPageContext() {
-    const owner = String(user()._id || 0), name = pageName();
-    if (location.href !== route || owner !== routeOwner || name !== routeName) {
+    const owner = String(user()._id || 0), name = pageName(), domain = domainId();
+    if (location.href !== route || owner !== routeOwner || name !== routeName || domain !== routeDomain) {
       const accountChanged = owner !== routeOwner;
-      route = location.href; routeOwner = owner; routeName = name;
+      route = location.href; routeOwner = owner; routeName = name; routeDomain = domain;
       routeEpoch++; contextBody = {}; pageRequest = undefined;
+      abandonPlannerView();
       if ($('#exhloj-contest-files, #exhloj-profile-view')) $('#exhloj-local-dialog')?.close();
       semanticPanel?.controller?.abort();
       if (semanticPanel?.body.isConnected) renderSearchResults(semanticPanel);
@@ -3775,9 +3827,10 @@
   }
   function refresh() {
     syncPageContext();
+    if (!settings.homeworkPlanner && (workJobs.has('planner') || $('dialog[data-exh-homework-plan]'))) abandonPlannerView();
     document.documentElement.classList.toggle('exhloj-local-rounded', enabled('rounded'));
     document.documentElement.classList.toggle('exhloj-local-ui', settings.ui);
-    installMenu(); syncMenuVisibility();
+    installMenu(); syncMenuVisibility(); syncRankingLayout();
     try {
       if (page.UiContext) {
         if (!page.UiContext.exhloj) page.UiContext.exhloj = {};

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Extend HLOJ
 // @namespace    exhloj-local
-// @version      3.0.0
+// @version      3.1.0
 // @description  HLOJ 训练助手：题源与难度、比赛、练习统计、用户资料和 Rating。
 // @homepageURL  https://github.com/sxmqwq/new-exhloj
 // @supportURL   https://github.com/sxmqwq/new-exhloj/issues
@@ -54,9 +54,9 @@
   if (!(location.hostname === 'oj.hailiangedu.com' ||
       location.host === 'www.nfls.com.cn:10611' || /(^|\.)oifha\.com$/.test(location.hostname))) return;
   if (document.documentElement.dataset.exhlojCoreUi) return;
-  document.documentElement.dataset.exhlojCoreUi = '3.0.0';
+  document.documentElement.dataset.exhlojCoreUi = '3.1.0';
 
-  const VERSION = '3.0.0';
+  const VERSION = '3.1.0';
   const SETTINGS_KEY = 'exhloj.coreui.settings.v1';
   const CACHE_KEY = 'exhloj.coreui.cache.v1';
   const CAPTCHA_KEY = 'exhloj.local.captcha.history';
@@ -72,15 +72,19 @@
     hideNavDiscussion: ['隐藏讨论', true], hideNavRecords: ['隐藏评测记录', true],
     profileInfoEntry: ['显示「用户信息」入口', true],
   };
+  const RANKING_OPTIONS = {
+    rankingAlignLeft: ['右侧统计信息靠左排列', false],
+    rankingHideBio: ['隐藏个人简介', false],
+  };
   const OPTIONS = {
     rounded: ['卡片圆角与布局', true], homework: ['作业标题与附件', true],
     scoreboard: ['榜单奖牌、标题链接与最早提交标记', true],
     markdown: ['复制题面 / 题解 Markdown', true], cph: ['发送到 CPH', true], editor: ['发送到 CP Editor', true],
     avatar: ['头像链接设置入口', true], permissions: ['查看用户权限', true],
     cleanMenu: ['隐藏失效菜单链接', true],
-    ...MENU_OPTIONS,
+    ...MENU_OPTIONS, ...RANKING_OPTIONS,
   };
-  const DEFAULTS = { ui: true, captcha: true, remote: true, contestHelper: true, juanMonitor: true,
+  const DEFAULTS = { ui: true, captcha: true, remote: true, contestHelper: true, homeworkPlanner: true, juanMonitor: true,
     userModule: true, userDisplay: 'no-change', userCCF: false,
     helperDelay: 250, helperPageLimit: 100, helperRequestLimit: 2000, contestFiles: true, contestDetails: false,
     autoAttend: false, autoAttendInterval: 60, autoAttendTargets: '', autoAttendTitle: '', autoAttendRules: '',
@@ -103,7 +107,7 @@
   function normalizeSettings(value) {
     if (!isObject(value)) throw new Error('设置必须是 JSON 对象');
     const result = clone(DEFAULTS);
-    for (const key of ['ui', 'captcha', 'remote', 'captchaHide', 'captchaRemember', 'remoteAuto', 'contestHelper', 'juanMonitor',
+    for (const key of ['ui', 'captcha', 'remote', 'captchaHide', 'captchaRemember', 'remoteAuto', 'contestHelper', 'homeworkPlanner', 'juanMonitor',
       'contestFiles', 'contestDetails', 'autoAttend', 'juanRecords', 'juanContests', 'juanHomeworks', 'userModule', 'userCCF']) {
       if (typeof value[key] === 'boolean') result[key] = value[key];
     }
@@ -194,6 +198,9 @@
   });
 
   const baseStyle = el('style', { id: 'exhloj-local-style' });
+  // Hydro moves the sticky heading and its cloned colgroup into a second table.
+  const rankingTable = ':is([data-fragment-id="ranking"] table.data-table,.main table.data-table:has(>colgroup>col.col--rp)):not(.col--bio *)';
+  const rankingCells = `:is(${rankingTable}>colgroup,${rankingTable}>:is(thead,tbody)>tr)>`;
   baseStyle.textContent = `
     #exhloj-local-toast{position:fixed;bottom:25px;left:50%;transform:translateX(-50%);z-index:2147483647;
       background:#234537;color:white;padding:12px 20px;border-radius:8px;max-width:90vw;box-shadow:0 4px 20px #0003}
@@ -222,6 +229,11 @@
     @media(max-width:520px){#exhloj-local-dialog header{padding:14px 16px}#exhloj-local-dialog .exhloj-dialog-body{padding:10px 16px 18px}.exhloj-panel-grid{grid-template-columns:1fr;gap:9px}.exhloj-panel-nav{padding:0 12px 9px}#exhloj-local-dialog .exhloj-panel-tab{padding:6px 10px}}
     #exhloj-local-dialog label{display:block;margin:9px 0}#exhloj-local-dialog input[type=checkbox]{margin-right:9px}
     [data-exh-menu-hidden]{display:none!important}
+    html.exhloj-ranking-left ${rankingCells}.col--user{width:clamp(7rem,17vw,11rem)!important}
+    html.exhloj-ranking-left ${rankingCells}:is(.col--rp,.col--detail,.col--ac,.col--bio){text-align:left!important}
+    html.exhloj-ranking-no-bio ${rankingCells}.col--bio{display:none!important}
+    html.exhloj-ranking-left.exhloj-ranking-no-bio ${rankingCells}.col--ac{width:auto!important}
+    @media(max-width:600px){html.exhloj-ranking-left ${rankingCells}.col--ac{width:auto!important}}
     #exhloj-profile-entry{display:inline-flex;align-items:center;vertical-align:middle;box-sizing:border-box;width:auto;min-height:28px;margin:2px 4px;padding:2px 10px;border:1px solid #cbd8e2;border-radius:5px;background:#eff5f8;color:#284e69;font:inherit;font-size:13px;line-height:1.4;white-space:nowrap;cursor:pointer}
     .profile-header #exhloj-profile-entry{background:#263a5266;color:white;border-color:#ffffff9c}
     #exhloj-profile-entry:focus-visible{outline:2px solid currentColor;outline-offset:2px}
@@ -292,6 +304,12 @@
     .exhloj-remote-article pre{overflow:auto;white-space:pre}.exhloj-remote-article img{max-width:100%}
     .exhloj-work-progress{padding:8px 12px;background:#eef5fb;border-radius:6px;white-space:pre-wrap;overflow-wrap:anywhere}
     .exhloj-work-results{overflow:auto;max-height:45vh}.exhloj-work-results table{min-width:500px}
+    #exhloj-homework-plan-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,11rem),1fr));gap:8px 12px;align-items:end;margin:12px 0}
+    #exhloj-local-dialog #exhloj-homework-plan-form label{margin:0}
+    #exhloj-homework-plan-form input{display:block;width:100%;min-width:0;box-sizing:border-box;padding:5px 8px;font:inherit;color:inherit;background:white;border:1px solid #b5bfca;border-radius:5px}
+    #exhloj-homework-plan-scan{grid-column:1}
+    #exhloj-homework-plan-results th,#exhloj-homework-plan-results td{text-align:left;vertical-align:top;padding:5px 8px}
+    #exhloj-homework-plan-results td:nth-child(2){font-variant-numeric:tabular-nums}
     .exhloj-oier-option{padding:8px 0;border-bottom:1px solid #ddd}.exhloj-oier-option p{margin:3px 0}
     .exhloj-work-errors{color:#9a3939;white-space:pre-wrap;max-height:150px;overflow:auto}
     #exhloj-local-dialog .exhloj-remote-article textarea{height:180px}
@@ -310,7 +328,7 @@
   `;
   document.head.append(baseStyle);
 
-  const PANEL_SECTIONS = [['home', '首页'], ['contest', '比赛'], ['juan', '卷王'], ['user', '用户'], ['remote', '题源'], ['settings', '设置'], ['data', '数据']];
+  const PANEL_SECTIONS = [['home', '首页'], ['contest', '比赛'], ['juan', '卷王'], ['user', '用户'], ['ranking', '排名页'], ['remote', '题源'], ['settings', '设置'], ['data', '数据']];
   let panelSection = 'home';
   function modal(title, section = panelSection) {
     $('#exhloj-local-dialog')?.close();
@@ -330,13 +348,33 @@
   }
   function openPanelSection(section) {
     if (!PANEL_SECTIONS.some(row => row[0] === section)) return;
-    const module = { contest: 'contestHelper', juan: 'juanMonitor', user: 'userModule', remote: 'remote' }[section];
+    const module = { contest: 'contestHelper', juan: 'juanMonitor', user: 'userModule', ranking: 'ui', remote: 'remote' }[section];
     if (module && !settings[module]) {
       const body = modal(PANEL_SECTIONS.find(row => row[0] === section)[1], section);
       body.append(el('p', {}, '此功能已关闭，可在设置中开启。'), button('打开设置', 'panel-settings')); return;
     }
-    const open = { home: openHome, contest: openContestHelper, juan: openJuanMonitor, user: openUserTools, remote: openRemoteTools, settings: openSettings, data: openDataTools }[section];
+    const open = { home: openHome, contest: openContestHelper, juan: openJuanMonitor, user: openUserTools, ranking: openRankingOptions, remote: openRemoteTools, settings: openSettings, data: openDataTools }[section];
     if (open) open();
+  }
+  function syncRankingLayout() {
+    const here = /^(?:\/d\/[^/]+)?\/ranking\/?$/.test(location.pathname) && (!pageName() || pageName() === 'ranking');
+    const classes = document.documentElement.classList;
+    classes.toggle('exhloj-ranking-left', here && enabled('rankingAlignLeft'));
+    classes.toggle('exhloj-ranking-no-bio', here && enabled('rankingHideBio'));
+  }
+  function openRankingOptions() {
+    const body = modal('排名页', 'ranking'), group = el('fieldset', { id: 'exhloj-ranking-options' });
+    group.append(el('legend', {}, '域排名表'));
+    for (const [key, [title]] of Object.entries(RANKING_OPTIONS)) {
+      const label = el('label'), input = el('input', { type: 'checkbox', name: key });
+      input.checked = settings.options[key]; label.append(input, title); group.append(label);
+      input.addEventListener('change', () => task(() => {
+        const next = { ...settings, options: { ...settings.options, [key]: input.checked } };
+        try { save(SETTINGS_KEY, next); } catch (error) { input.checked = settings.options[key]; throw error; }
+        settings = next; syncRankingLayout();
+      }));
+    }
+    body.append(group, el('p', {}, '左对齐会把 RP、题目、比赛和通过数排在用户名旁边。修改立即生效。'));
   }
   function openHome() {
     const body = modal('控制面板', 'home'), store = userStore();
@@ -414,7 +452,7 @@
     const moduleInput = el('input', { type: 'checkbox', name: 'ui' }); moduleInput.checked = settings.ui;
     moduleLabel.append(moduleInput, '界面增强'); form.append(moduleLabel);
     for (const [key, [text]] of Object.entries(OPTIONS)) {
-      if (key === 'cph' || key === 'editor' || Object.hasOwn(MENU_OPTIONS, key)) continue;
+      if (key === 'cph' || key === 'editor' || Object.hasOwn(MENU_OPTIONS, key) || Object.hasOwn(RANKING_OPTIONS, key)) continue;
       const label = el('label'), input = el('input', { type: 'checkbox', name: key });
       input.checked = settings.options[key]; label.append(input, text); form.append(label);
     }
@@ -442,7 +480,7 @@
     for (const [key, text] of [['captcha', '验证码识别'], ['captchaHide', '识别成功后折叠验证码'],
       ['captchaRemember', '识别成功后勾选“记住我”'], ['remote', '题源与题解'],
       ['remoteAuto', '自动读取已识别题目的难度（缓存 24 小时）'],
-      ['contestHelper', '比赛助手'], ['juanMonitor', '卷王监视器'], ['userModule', '用户资料与 Rating']]) {
+      ['contestHelper', '比赛助手'], ['homeworkPlanner', '作业补题计划'], ['juanMonitor', '卷王监视器'], ['userModule', '用户资料与 Rating']]) {
       const label = el('label'), input = el('input', { type: 'checkbox', name: key });
       input.checked = settings[key]; label.append(input, text); form.append(label);
     }
@@ -511,7 +549,7 @@
     return content;
   }
 
-  let route = location.href, routeOwner = String(user()._id || 0), routeName = pageName();
+  let route = location.href, routeOwner = String(user()._id || 0), routeName = pageName(), routeDomain = domainId();
   let routeEpoch = 0, contextBody = {}, pageRequest, lastPageError = '';
   function current(name) { syncPageContext(); return contextBody[name] ?? ui()[name]; }
   async function requestJSON(path = location.href, options = {}) {
@@ -779,14 +817,15 @@
         note = remoteState.origin?.type === 'none' ? '已停用此题的自动题源识别' : remoteState.messages.join('；');
       } else if (settings.remote && hiddenContestSource() && settings.remoteContest === 'shortcut') note = '按 Ctrl+Q 显示比赛题源';
       if (settings.ui && groups.some(group => group.length)) groups.push([['编辑器设置', 'editor-settings']]);
-    } else if (['contest_main', 'contest_detail', 'contest_scoreboard', 'homework_detail', 'homework_scoreboard'].includes(name)) {
+    } else if (['contest_main', 'contest_detail', 'contest_scoreboard', 'homework_main', 'homework_detail', 'homework_scoreboard'].includes(name)) {
       label = name.startsWith('homework') ? '作业工具' : '比赛工具';
+      if (name === 'homework_main' && settings.homeworkPlanner) groups.push([['补题计划', 'homework-plan-open']]);
       if (settings.userModule && name.startsWith('contest')) {
         const rating = [], target = contestContext();
         if (name !== 'contest_main' && ratedContestPath(target.domain + '/' + target.id, false)) rating.push(['加入 Rating 并结算', 'user-rate-current']);
         groups.push([...rating, ['时间轴结算', 'user-timeline'], ['Rating 记录与命令', 'user-rated']]);
       }
-      if (settings.contestHelper && name !== 'contest_main') groups.push([[name.startsWith('homework') ? '作业助手' : '比赛助手', 'contest-helper']]);
+      if (settings.contestHelper && !name.endsWith('_main')) groups.push([[name.startsWith('homework') ? '作业助手' : '比赛助手', 'contest-helper']]);
     }
     return { label, groups: groups.filter(group => group.length), note, view };
   }
@@ -2073,7 +2112,7 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
 
 
   // contest-helper / juan-monitor 共用串行请求、进度与取消控制。
-  const workStates = { contest: {}, juan: {}, auto: {}, user: {}, oier: {} }, workJobs = new Map();
+  const workStates = { contest: {}, juan: {}, auto: {}, user: {}, oier: {}, planner: {} }, workJobs = new Map();
   const SNAPSHOT_KEY = 'exhloj.local.juan.snapshots.v1', ATTEND_KEY = 'exhloj.local.attended.v1';
   const VERDICTS = { 0: 'Waiting', 1: 'Accepted', 2: 'Wrong Answer', 3: 'Time Limit Exceeded', 4: 'Memory Limit Exceeded',
     5: 'Output Limit Exceeded', 6: 'Runtime Error', 7: 'Compile Error', 8: 'System Error', 9: 'Cancelled', 20: 'Running', 21: 'Compiling', 30: 'Ignored' };
@@ -2082,6 +2121,8 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
   function checkJob(job, requesting = false) {
     if (job.controller.signal.aborted) throw workError('任务已取消');
     if (job.owner !== +user()._id) throw workError('登录账号已变化，任务停止');
+    if (job.kind === 'planner' && (!settings.homeworkPlanner || job.epoch !== routeEpoch || job.address !== location.href ||
+        job.domain !== domainId() || pageName() !== 'homework_main')) throw workError('作业页面或账号已变化，请重新查找');
     if (job.kind === 'user' && (job.epoch !== routeEpoch || job.address !== location.href || job.pageName !== pageName())) throw workError('页面已变化，请重新开始结算');
     if (requesting && job.count >= job.limit) throw workError(`达到 ${job.limit} 次请求上限；本次结果不完整`, true);
   }
@@ -2135,11 +2176,11 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
     });
   }
   async function runWork(kind, fn, local = false) {
-    if (kind === 'user') syncPageContext();
+    if (kind === 'user' || kind === 'planner') syncPageContext();
     if (workJobs.has(kind)) throw workError('此模块已有任务运行，请等待或取消');
     if (!local && !(+user()._id > 0)) throw workError('请先登录 OJ');
     const state = workStates[kind], job = { kind, count: 0, limit: settings.helperRequestLimit,
-      delay: settings.helperDelay, owner: +user()._id, epoch: routeEpoch, address: location.href, pageName: pageName(), controller: new AbortController() };
+      delay: settings.helperDelay, owner: +user()._id, domain: domainId(), epoch: routeEpoch, address: location.href, pageName: pageName(), controller: new AbortController() };
     workJobs.set(kind, job); Object.assign(state, { kind, job, running: true, status: '', message: '', errors: [] }); updateWorkProgress(kind);
     try { return await fn(job, state); }
     catch (error) {
@@ -2328,6 +2369,7 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
   function openContestHelper() {
     if (!settings.contestHelper) throw workError('请先启用 contest-helper');
     const context = contestContext(), body = modal(context.kind === 'homework' ? '作业助手' : '比赛助手', 'contest'), form = el('form', { id: 'exhloj-contest-form' });
+    if (pageName() === 'homework_main' && settings.homeworkPlanner) body.append(button('补题计划', 'homework-plan-open'));
     for (const [name, title, value] of [['domain', '域 ID', context.domain], ['tid', '比赛 / 作业 ID', context.id]]) {
       const label = el('label', {}, title + ' '); label.append(el('input', { type: 'text', name, value, required: true })); form.append(label);
     }
@@ -3931,13 +3973,13 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
         case 'save-settings': {
           const form = $('#exhloj-local-settings');
           if (!form.reportValidity()) return;
-          const value = { ...settings, ui: form.elements.ui.checked, options: {} };
+          const value = { ...settings, ui: form.elements.ui.checked, options: { ...settings.options } };
           for (const key of ['cphPort', 'editorPort']) if (!form.elements[key].disabled) value[key] = +form.elements[key].value;
-          for (const key of ['captcha', 'remote', 'captchaHide', 'captchaRemember', 'remoteAuto', 'contestHelper', 'juanMonitor', 'autoAttend', 'userModule']) value[key] = form.elements[key].checked;
+          for (const key of ['captcha', 'remote', 'captchaHide', 'captchaRemember', 'remoteAuto', 'contestHelper', 'homeworkPlanner', 'juanMonitor', 'autoAttend', 'userModule']) value[key] = form.elements[key].checked;
           for (const key of ['helperDelay', 'helperPageLimit', 'helperRequestLimit', 'autoAttendInterval']) value[key] = +form.elements[key].value;
           for (const key of ['autoAttendTargets', 'autoAttendTitle', 'autoAttendRules']) value[key] = form.elements[key].value;
           value.remoteContest = form.elements.remoteContest.value; value.remoteColor = form.elements.remoteColor.value;
-          for (const key of Object.keys(OPTIONS)) value.options[key] = form.elements[key].checked;
+          for (const key of Object.keys(OPTIONS)) if (!Object.hasOwn(RANKING_OPTIONS, key)) value.options[key] = form.elements[key].checked;
           const next = normalizeSettings(value); save(SETTINGS_KEY, next); settings = next;
           refresh();
           notify('设置已保存，刷新页面后完整生效'); break;
@@ -4036,6 +4078,7 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
         case 'remote-copy-solution': await copyText(stateFor(control).solutions[+control.dataset.index]?.content); break;
         case 'remote-code': await loadSubmissionCode(control); break;
         case 'contest-helper': openContestHelper(); break;
+        case 'homework-plan-open': if (pageName() === 'homework_main' && settings.homeworkPlanner) openHomeworkPlanner(); break;
         case 'contest-statements': await exportContestStatements(contestInput()); break;
         case 'contest-records-csv': await exportContestRecords(contestInput(), 'csv'); break;
         case 'contest-records-json': await exportContestRecords(contestInput(), 'json'); break;
@@ -4077,12 +4120,522 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
     }
   });
 
+  // Only validated planner projections are cached; raw Hydro pages can contain session/user details.
+  const HOMEWORK_PLAN_CACHE_TTL = 10 * 60 * 1000;
+  const HOMEWORK_PLAN_CACHE_KEY = 'exhloj.local.homework-plan.responses.v1';
+  const HOMEWORK_PLAN_CACHE_CHARS = 1024 * 1024, HOMEWORK_PLAN_CACHE_ITEMS = 256;
+  const homeworkPlanCache = (() => {
+    let memory = [];
+    const inflight = new Map(), localMarks = new Map();
+    const fresh = (stamp, now) => Number.isFinite(stamp) && stamp <= now && now - stamp < HOMEWORK_PLAN_CACHE_TTL;
+    const markerKey = scope => HOMEWORK_PLAN_CACHE_KEY + '.reset.' + scope;
+    function revision(scope) {
+      const local = localMarks.get(scope);
+      try {
+        const rawMark = GM_getValue(markerKey(scope), ''), storedMark = typeof rawMark === 'string' ? rawMark : '';
+        // A failed marker write must still invalidate local requests. A newer marker from
+        // another tab supersedes our local fallback.
+        return local && storedMark === local.previous ? local.mark : storedMark;
+      } catch { return local?.mark || ''; }
+    }
+    function load() {
+      try {
+        const raw = GM_getValue(HOMEWORK_PLAN_CACHE_KEY, '');
+        if (typeof raw !== 'string' || !raw || raw.length > HOMEWORK_PLAN_CACHE_CHARS) return [];
+        const rows = JSON.parse(raw);
+        return Array.isArray(rows) ? rows.filter(r => Array.isArray(r) && r.length === 5 &&
+          typeof r[0] === 'string' && typeof r[1] === 'string' && typeof r[2] === 'string' && typeof r[4] === 'string') : [];
+      } catch { return []; }
+    }
+    // Newest first. Bound the actual encoded storage size as well as the number of URLs.
+    function bounded(rows, now) {
+      let size = 2; const kept = [];
+      for (const r of rows) {
+        if (!fresh(r[3], now) || r[4].length > HOMEWORK_PLAN_CACHE_CHARS) continue;
+        const cost = JSON.stringify(r).length + 1;
+        if (size + cost > HOMEWORK_PLAN_CACHE_CHARS) continue;
+        kept.push(r); size += cost;
+        if (kept.length === HOMEWORK_PLAN_CACHE_ITEMS) break;
+      }
+      return kept;
+    }
+    function write(rows) { GM_setValue(HOMEWORK_PLAN_CACHE_KEY, JSON.stringify(rows)); }
+    function remember(row) {
+      const now = Date.now(), other = r => r[0] !== row[0] || r[1] !== row[1];
+      memory = bounded([row, ...memory.filter(other)], now);
+      // A full/disabled persistent store must not turn a successful request into an error.
+      try { write(bounded([row, ...load().filter(other)], now)); } catch {}
+    }
+    function reset(scope) {
+      const mark = `${Date.now()}:${Math.random()}`;
+      let previous = ''; try { previous = GM_getValue(markerKey(scope), '') || ''; } catch {}
+      localMarks.set(scope, { previous, mark });
+      for (const [id, flight] of inflight) if (flight.scope === scope) { flight.dead = true; inflight.delete(id); }
+      memory = memory.filter(r => r[0] !== scope);
+      // A separate per-scope marker prevents an earlier request in a different tab from repopulating
+      // a reset cache. Even if the old payload temporarily survives, its generation cannot be read.
+      let marked = false;
+      try { GM_setValue(markerKey(scope), mark); marked = true; } catch {}
+      try { write(bounded(load().filter(r => r[0] !== scope), Date.now())); }
+      catch { if (!marked) throw workError('无法清除持久缓存，请检查脚本存储后重试'); }
+    }
+    function cached(scope, key, mark) {
+      const now = Date.now(), match = r => r[0] === scope && r[1] === key && r[2] === mark && fresh(r[3], now);
+      const r = memory.find(match) || load().find(match);
+      if (r) { try { return { data: JSON.parse(r[4]), json: r[4] }; } catch { /* corrupted projection: refetch */ } }
+    }
+    async function read(scope, key, guard, fetchProjection, signal) {
+      guard();
+      const mark = revision(scope), hit = cached(scope, key, mark);
+      if (hit) {
+        await Promise.resolve(); guard();
+        if (revision(scope) !== mark) throw workError('补题缓存已重置，请重新查找');
+        return hit.data;
+      }
+      const id = JSON.stringify([scope, key, mark]);
+      let flight = inflight.get(id);
+      if (!flight) {
+        flight = { scope, dead: false };
+        const verify = () => {
+          guard();
+          if (flight.dead || revision(scope) !== mark) throw workError('补题缓存已重置，请重新查找');
+        };
+        const compute = async (recheck = false) => {
+          verify();
+          // Another tab may have filled this entry while this tab was waiting for its lock.
+          const ready = recheck && cached(scope, key, mark); if (ready) return ready.json;
+          const value = await fetchProjection();
+          verify();
+          const json = JSON.stringify(value);
+          if (typeof json !== 'string') throw workError('作业接口数据不完整，未缓存');
+          remember([scope, key, mark, Date.now(), json]); return json;
+        };
+        flight.result = Promise.resolve().then(async () => {
+          let entered = false;
+          try {
+            const locks = globalThis.navigator?.locks;
+            if (locks?.request) return await locks.request(HOMEWORK_PLAN_CACHE_KEY + ':' + id, signal ? { signal } : {},
+              () => { entered = true; return compute(true); });
+          } catch (error) { if (entered || signal?.aborted) throw error; }
+          return compute();
+        }).finally(() => { if (inflight.get(id) === flight) inflight.delete(id); });
+        inflight.set(id, flight);
+      }
+      const result = await flight.result;
+      guard();
+      if (flight.dead || revision(scope) !== mark) throw workError('补题缓存已重置，请重新查找');
+      return JSON.parse(result);
+    }
+    return { read, reset, revision };
+  })();
+
+  function homeworkPlanCacheScope(domain) {
+    const uid = +user()._id;
+    if (!Number.isSafeInteger(uid) || uid <= 0) throw workError('请先登录 OJ');
+    if (typeof domain !== 'string' || !domain || domain !== domainId()) throw workError('当前域已变化，请重新查找');
+    return JSON.stringify([location.origin, domain, uid]);
+  }
+  function resetHomeworkPlanCache(domain = domainId()) { homeworkPlanCache.reset(homeworkPlanCacheScope(domain)); }
+  function homeworkPlanCacheRevision(domain = domainId()) { return homeworkPlanCache.revision(homeworkPlanCacheScope(domain)); }
+  function homeworkPlanCachePath(domain, path, uid) {
+    const u = new URL(path, location.origin), parts = u.pathname.replace(/\/$/, '').split('/');
+    const allowedPage = v => /^[1-9]\d{0,5}$/.test(v);
+    const id = v => /^(?:[\da-f]{24}|[1-9]\d{0,15})$/i.test(v);
+    if (u.origin !== location.origin || u.username || u.password || u.hash || parts[1] !== 'd' || decodeURIComponent(parts[2] || '') !== domain)
+      throw workError('补题查询只允许读取当前域');
+    const [kind, arg, suffix] = parts.slice(3);
+    // Reading a homework detail can start a timed assignment. Only its list and scoreboard are read.
+    const hw = kind === 'homework' && (parts.length === 4 || (parts.length === 6 && id(arg) && suffix === 'scoreboard'));
+    const profile = parts.length === 5 && kind === 'user' && arg === String(uid);
+    const problem = parts.length === 5 && kind === 'p' && /^[\p{L}\p{N}_.-]{1,100}$/u.test(decodeURIComponent(arg));
+    if (!hw && !profile && !problem) throw workError('不支持的补题查询地址');
+    for (const [k, v] of u.searchParams) {
+      if (u.searchParams.getAll(k).length !== 1 || !(hw && k === 'page' && allowedPage(v)))
+        throw workError('不支持的补题查询参数');
+    }
+    u.searchParams.sort(); return u.pathname + u.search;
+  }
+  async function homeworkPlanRead(job, domain, path, view, project) {
+    const scope = homeworkPlanCacheScope(domain), keyPath = homeworkPlanCachePath(domain, path, job.owner);
+    if (typeof view !== 'string' || !/^[a-zA-Z][\w.-]{0,63}$/.test(view) || typeof project !== 'function') throw workError('补题缓存数据类型无效');
+    const guard = () => {
+      checkJob(job);
+      if (scope !== homeworkPlanCacheScope(domain)) throw workError('账号或域已变化，请重新查找');
+    };
+    return homeworkPlanCache.read(scope, JSON.stringify([view, keyPath]), guard,
+      async () => { const body = await jobJSON(job, keyPath); guard(); return project(body); }, job.controller?.signal);
+  }
+
+  // The reader stores only the validated projection, scoped to this domain and account.
+  const scanHomeworkPlan = (() => {
+    const obj = v => v !== null && typeof v === 'object' && !Array.isArray(v);
+    const own = (v, k) => Object.prototype.hasOwnProperty.call(v || {}, k);
+    const fail = message => { throw new Error(message); };
+    const trim = v => typeof v === 'string' ? v.trim().slice(0, 250) : '';
+    const nat = v => (typeof v === 'number' || typeof v === 'string' && /^\d+$/.test(v)) && Number.isSafeInteger(+v) && +v >= 0;
+    const id = v => {
+      if (obj(v)) v = v.docId ?? v.$oid ?? v.pid;
+      const s = String(v ?? '').replace(/^ObjectId::/, '');
+      return /^[\w-]{1,100}$/.test(s) ? s : '';
+    };
+    function date(v) {
+      if (obj(v)) v = v.$date;
+      if (v === '' || v == null) return null;
+      const n = typeof v === 'number' ? (v < 1e11 ? v * 1000 : v) : Date.parse(v);
+      return Number.isFinite(n) ? n : null;
+    }
+    function confirmDomain(v, domain) {
+      if (v?.domainId != null && String(v.domainId) !== domain) fail('返回的数据不属于当前域');
+    }
+    function homework(doc, domain, expected) {
+      if (!obj(doc)) fail('缺少作业信息');
+      const key = id(doc.docId ?? doc._id);
+      if (!key || expected && key !== expected || doc.rule && doc.rule !== 'homework') fail('作业标识或类型不符');
+      confirmDomain(doc, domain);
+      return { id: key, title: trim(doc.title) || key, begin: date(doc.beginAt) };
+    }
+    function pageInfo(v, page, list = false) {
+      if (v.page != null && (!nat(v.page) || +v.page !== page)) fail('返回了错误的页码');
+      const count = v.pageCount ?? (list ? v.tpcount : v.spcount) ?? v.totalPages;
+      if (count == null) return null;
+      if (!nat(count) || +count < page && !(page === 1 && +count === 0)) fail('分页信息无效');
+      return +count;
+    }
+    function profile(body, uid, domain) {
+      // Hydro user_detail.pdocs is the list of accepted problems. pdict/psdocs on this page are editorials.
+      const who = body.udoc?._id ?? body.udoc?.uid;
+      if (body.isSelfProfile === false || who != null && (!nat(who) || +who !== uid)) throw Object.assign(new Error('登录身份与当前账号不符，已停止查询'), { accountMismatch:true });
+      if (!nat(who) || !Array.isArray(body.pdocs)) fail('无法确认当前账号的通过列表');
+      const solved = new Set();
+      for (const p of body.pdocs) {
+        const pid = id(p?.docId ?? p?.pid);
+        if (!pid) fail('通过列表有无法识别的题号');
+        confirmDomain(p, domain); solved.add(pid);
+      }
+      // The profile's nAccept counts practice ACs only; equality cannot certify coverage of hidden or contest ACs.
+      // Positive pdocs prove the account can view problems. This covers visible problems only, on the native, unpaged profile.
+      const visible = body.isSelfProfile === true && solved.size > 0 && !body.hasMore && !body.truncated && !(body.pageCount > 1) &&
+        !(body.page > 1) && !(nat(body.udoc.nAccept) && +body.udoc.nAccept > solved.size);
+      return { solved: [...solved], visible, selfVerified:body.isSelfProfile === true };
+    }
+    function problemStatus(body, pid, uid, domain) {
+      if (!obj(body.pdoc) || id(body.pdoc.docId ?? body.pdoc.pid) !== pid || body.tdoc || (body.mode && body.mode !== 'normal') || !own(body, 'psdoc')) fail('题库未返回可核实的本人状态');
+      confirmDomain(body.pdoc, domain);
+      const ps = body.psdoc;
+      if (ps === null) return { ac: false, ownerVerified:false };
+      if (!obj(ps) || ps.uid != null && +ps.uid !== uid || ps.docId != null && id(ps.docId) !== pid) fail('个人题目状态与请求不符');
+      confirmDomain(ps, domain);
+      if (ps.status == null) {
+        // A star-only document has no submissions. An unknown record must not become an unsolved problem.
+        if (typeof ps.star === 'boolean' && !ps.rid) return { ac: false, ownerVerified:+ps.uid === uid };
+        fail('个人题目状态缺少评测结果');
+      }
+      if (!nat(ps.status)) fail('无法识别个人评测结果');
+      return { ac: +ps.status === 1, ownerVerified:+ps.uid === uid };
+    }
+    function verdict(cell) {
+      if (cell == null || obj(cell) && !Object.keys(cell).length) return false;
+      if (!obj(cell)) return null;
+      if (cell.type === 'records' && Array.isArray(cell.raw)) {
+        const parts = cell.raw.map(verdict);
+        return parts.includes(true) ? true : parts.includes(null) ? null : false;
+      }
+      const raw = obj(cell.raw) ? cell.raw : {};
+      const status = raw.status ?? cell.status;
+      if (status != null) return nat(status) ? +status === 1 : null;
+      const score = cell.score ?? raw.score;
+      if (score != null && score !== '' && Number.isFinite(+score)) return +score === 100;
+      // Homework displays penalized score / original score followed by elapsed time. Only original score indicates AC.
+      const first = String(cell.value ?? '').trim().split(/\r?\n/)[0].trim();
+      if (!first || /^[-–—]$/.test(first)) return cell.raw == null ? false : null;
+      const m = /^(\d+(?:\.\d+)?)(?:\s*\/\s*(\d+(?:\.\d+)?))?$/.exec(first);
+      return m ? +(m[2] ?? m[1]) === 100 : null;
+    }
+    function explicitAC(cell) {
+      if (cell?.type === 'records' && Array.isArray(cell.raw)) return cell.raw.some(explicitAC);
+      return +(cell?.raw?.status ?? cell?.status) === 1;
+    }
+    function boardPage(body, task, page, domain, uid) {
+      const doc = body.tdoc;
+      if (!obj(doc) || doc.rule && doc.rule !== 'homework' || doc.docId != null && id(doc.docId) !== task.id) fail('不是所请求作业的榜单');
+      confirmDomain(doc, domain);
+      if (!Array.isArray(body.rows) || !Array.isArray(body.rows[0])) fail('榜单缺少表头或不可见');
+      const pages = pageInfo(body, page), header = body.rows[0], columns = [];
+      const seen = new Set(), roster = new Set();
+      for (const [i, cell] of header.entries()) if (cell?.type === 'problem') {
+        const pid = id(cell.raw);
+        if (!pid || seen.has(pid)) fail('榜单题号不完整或重复');
+        seen.add(pid); const p = body.pdict?.[pid] || {}; confirmDomain(p, domain);
+        if (p.docId != null && id(p.docId) !== pid) fail('榜单题号与题目详情不一致');
+        // On a Hydro homework scoreboard (only here), nAccept counts distinct students with an actual AC in their journal.
+        const official = doc.rule === 'homework' && nat(p.nAccept) ? +p.nAccept : null;
+        columns.push({ i, pid, title: trim(p.title) || trim(cell.title) || trim(p.pid) || pid,
+          official, public: p.hidden === false, hidden: p.hidden === true, counted: new Set(), self: false, exact: true });
+      }
+      if (Array.isArray(doc.pids) && (doc.pids.length !== seen.size || doc.pids.some(p => !seen.has(id(p))))) fail('榜单题目列不全');
+      if (!columns.length && (!Array.isArray(doc.pids) || doc.pids.length)) fail('无法识别榜单题目列');
+      const ui = header.findIndex(c => c?.type === 'user');
+      if (columns.length && ui < 0) fail('榜单没有用户列');
+      for (const row of body.rows.slice(1)) {
+        if (!Array.isArray(row)) fail('榜单行格式无效');
+        const raw = row[ui]?.raw, who = obj(raw) ? raw._id ?? raw.uid : raw;
+        if (!nat(who) || +who === 0) fail('榜单行没有可核实的用户 ID');
+        roster.add(+who);
+        for (const col of columns) {
+          const result = col.i >= row.length ? null : verdict(row[col.i]);
+          if (result === null) col.exact = false;
+          if (result === true) col.counted.add(+who);
+          if (+who === uid && explicitAC(row[col.i])) col.self = true;
+        }
+      }
+      const paged = pages > 1;
+      return { pages, begin:date(doc.beginAt), roster: paged ? [...roster] : [], problems: columns.map(c => {
+        if (!paged && c.official === null && !c.exact) fail('无法核实题目 '+c.pid+' 的通过人数');
+        return { pid:c.pid, title:c.title, public:c.public, hidden:c.hidden, self:c.self, exact:c.exact, official:paged ? c.official : null,
+          passed:c.official ?? c.counted.size, solvers:paged ? [...c.counted] : [] };
+      }) };
+    }
+    return async function ({ domain, uid, start, end, threshold, read, pageLimit = 100, check = () => {}, onProgress = () => {} }) {
+      uid = Number(uid); threshold = Number(threshold); pageLimit = Number(pageLimit);
+      if (!domain || !Number.isSafeInteger(uid) || uid <= 0 || !Number.isFinite(start) || !Number.isFinite(end) || start >= end ||
+          !Number.isSafeInteger(pageLimit) || pageLimit < 1 || pageLimit > 1000 || !Number.isSafeInteger(threshold) || threshold < 1 || typeof read !== 'function') fail('请输入有效日期、正整数人数阈值，并登录当前域');
+      const base = '/d/' + encodeURIComponent(domain), home = base + '/homework', warnings = [];
+      const docs = new Map(), selfAC = new Set(), candidates = new Map(); let scanned = 0, matched = 0;
+      const link = (p, tid) => base + '/p/' + encodeURIComponent(p) + (tid ? '?tid='+encodeURIComponent(tid) : '');
+      const warn = (label, error) => {
+        check(); if (error?.budget || error?.accountMismatch || error?.name === 'AbortError') throw error;
+        warnings.push(label+'：'+(error?.message || '读取失败'));
+      };
+      const get = async (path, view, project) => { check(); const v = await read(path, view, project); check(); return v; };
+      let listPages;
+      for (let n = 1; ; n++) {
+        try {
+          if (n > pageLimit) fail('已达到 '+pageLimit+' 页上限，列表不完整');
+          onProgress('正在读取作业列表，第 '+n+' 页');
+          const page = await get(home+'?page='+n,'list-v1', b => {
+            if (!Array.isArray(b?.tdocs)) fail('作业列表未返回');
+            return { pages:pageInfo(b,n,true), docs:b.tdocs.map(d => homework(d,domain)) };
+          });
+          if (n === 1) listPages = page.pages;
+          if (listPages !== page.pages) fail('分页总数在读取中发生变化');
+          if (!page.docs.length) {
+            if (listPages != null && (n < listPages || n > 1)) fail('分页中出现意外的空页');
+            break;
+          }
+          if (listPages === 0) fail('非空列表的页数为 0');
+          const before = docs.size;
+          for (const d of page.docs) if (!docs.has(d.id)) docs.set(d.id,d);
+          if (before === docs.size) fail('列表重复返回上一页');
+          if (listPages != null && n >= listPages) break;
+        } catch(e) { warn('作业列表第 '+n+' 页',e); break; }
+      }
+      for (let task of docs.values()) {
+        const url = home + '/' + encodeURIComponent(task.id);
+        try {
+          // The homework detail GET may set startAt on a claimed timed assignment. Only inspect its scoreboard.
+          if (task.begin !== null && (task.begin < start || task.begin >= end)) continue;
+          if (task.begin !== null) matched++;
+          onProgress('正在读取作业榜单：'+task.title);
+          const first = await get(url+'/scoreboard','board-v1',b=>boardPage(b,task,1,domain,uid));
+          if (task.begin === null) {
+            if (first.begin === null) fail('榜单和列表均未返回开始时间');
+            if (first.begin < start || first.begin >= end) continue;
+            matched++;
+          }
+          const probs = first.problems.map(p=>({...p}));
+          if (first.pages > 1) {
+            const known = new Set(first.roster), counts = probs.map(p=>new Set(p.solvers));
+            const stats = probs.map(p=>({values:[p.official], agrees:p.official===null ? p.exact : p.official===p.solvers.length}));
+            let disjoint=true, maxPage=first.roster.length; const pageSizes=[maxPage];
+            for (let n=2;n<=first.pages;n++) {
+              if (n>pageLimit) fail('榜单超过 '+pageLimit+' 页上限');
+              const pg=await get(url+'/scoreboard?page='+n,'board-v1',b=>boardPage(b,task,n,domain,uid));
+              if (pg.pages!==first.pages || pg.problems.length!==probs.length || pg.problems.some((p,j)=>p.pid!==probs[j].pid)) fail('榜单分页发生变化');
+              if (!pg.roster.some(u=>!known.has(u))) fail('榜单分页重复或为空');
+              if (pg.roster.some(u=>known.has(u))) disjoint=false;
+              pg.roster.forEach(u=>known.add(u)); maxPage=Math.max(maxPage,pg.roster.length); pageSizes.push(pg.roster.length);
+              pg.problems.forEach((p,j)=>{ p.solvers.forEach(u=>counts[j].add(u)); probs[j].self ||= p.self;
+                stats[j].values.push(p.official); stats[j].agrees &&= p.official===null ? p.exact : p.official===p.solvers.length;
+              });
+            }
+            probs.forEach((p,j)=>{
+              const {values,agrees}=stats[j], same=values[0]!==null && values.every(x=>x===values[0]);
+              if (same && values[0]>maxPage && values[0]<=known.size) p.passed=values[0]; // necessarily a whole-board total
+              else if (agrees) p.passed=counts[j].size; // confirmed per-page ACs with known user IDs
+              else if (disjoint && !same && values.every(v=>v!==null) && values.every((v,i)=>v<=pageSizes[i])) p.passed=values.reduce((a,b)=>a+b,0);
+              else fail('分页榜单无法核实题目 '+p.pid+' 的逐人状态');
+            });
+          }
+          scanned++;
+          for (const p of probs) {
+            if (p.self) selfAC.add(p.pid);
+            if (p.passed < threshold) continue;
+            let found = candidates.get(p.pid);
+            if (!found) { found={pid:p.pid,title:p.title,public:p.public,hidden:p.hidden,homeworks:[]}; candidates.set(p.pid,found); }
+            found.public ||= p.public; found.hidden ||= p.hidden;
+            found.homeworks.push({id:task.id,title:task.title,href:url,passed:p.passed});
+          }
+        } catch(e) { warn('作业 '+task.title,e); }
+      }
+      for (const pid of selfAC) candidates.delete(pid);
+      let mine;
+      if (candidates.size) {
+        onProgress('正在核对当前账号在本域通过的题目');
+        try { mine = await get(base+'/user/'+uid,'solved-v1',b=>profile(b,uid,domain)); }
+        catch(e) { warn('个人通过列表',e); }
+      }
+      const seenAC = new Set(mine?.solved || []), rows = [];
+      for (const [pid,p] of candidates) {
+        if (seenAC.has(pid)) continue;
+        let standalone = p.public;
+        if (!mine?.visible || !p.public) {
+          try { onProgress('正在核对本人题库状态：'+p.title);
+            const ps = await get(link(pid),'problem-v1', b=>problemStatus(b,pid,uid,domain)); if (!mine?.selfVerified && !ps.ownerVerified) fail('缺少本人身份依据');
+            if (ps.ac) continue; standalone = p.public || !p.hidden;
+          } catch(e) { warn('跳过无法核实本人状态的题目 '+pid,e); continue; }
+        }
+        p.homeworks.sort((a,b)=>b.passed-a.passed || a.id.localeCompare(b.id));
+        rows.push({pid,title:p.title,passed:p.homeworks[0].passed,href:link(pid,standalone ? null : p.homeworks[0].id),homeworks:p.homeworks});
+      }
+      check(); rows.sort((a,b)=>b.passed-a.passed || a.pid.localeCompare(b.pid, 'en', {numeric:true}));
+      return {rows,scanned,matched,warnings,complete:!warnings.length};
+    };
+  })();
+
+  // This module is included inside the userscript IIFE by scripts/build.cjs.
+  function openHomeworkPlanner() {
+    syncPageContext();
+    if (!settings.homeworkPlanner || pageName() !== 'homework_main') throw workError('请在作业首页启用并打开补题计划');
+    const body = modal('作业补题计划', 'contest'), dialog = body.closest('dialog');
+    dialog.dataset.exhHomeworkPlan = '1';
+    const domain = String(domainId()), uid = +user()._id, epoch = routeEpoch, address = location.href;
+    if (!Number.isSafeInteger(uid) || uid <= 0) { body.append(el('p', {}, '请先登录 OJ，再查找自己尚未通过的题目。')); return; }
+    const key = 'exhloj.local.homework-plan.last.v1:' + JSON.stringify([location.origin, domain, uid]);
+    const today = new Date(), month = new Date(today); month.setDate(month.getDate() - 29);
+    const defaults = { from: localDateInput(month), to: localDateInput(today), threshold: 3 };
+    const previous = stored(key, null);
+    let saved = previous?.schema === 1 && previous.uid === uid && previous.domain === domain &&
+      previous.origin === location.origin && previous.filters && Number.isFinite(previous.time) &&
+      Array.isArray(previous.rows) && previous.rows.every(r => r && Array.isArray(r.homeworks)) ? previous : null;
+    const form = el('form', { id: 'exhloj-homework-plan-form' }), filters = saved?.filters || defaults;
+    body.append(el('p', {}, '按作业开始日期查找，包含首尾两天。只列出你在本域尚未通过、且在至少一份作业中达到通过人数的题目。'));
+    for (const [name, label, type] of [['from', '开始日期', 'date'], ['to', '结束日期', 'date'], ['threshold', '至少通过人数', 'number']]) {
+      const wrap = el('label', {}, label + ' ');
+      wrap.append(el('input', { name, type, value: filters[name], required: '', ...(name === 'threshold' ? { min: 1, step: 1 } : {}) })); form.append(wrap);
+    }
+    const start = el('button', { id: 'exhloj-homework-plan-scan', type: 'submit', class: 'button exhloj-local-button' }, '查找补题');
+    const reset = el('button', { id: 'exhloj-homework-plan-reset', type: 'button', class: 'button exhloj-local-button' }, '重置请求缓存');
+    const results = el('div', { id: 'exhloj-homework-plan-results', class: 'exhloj-work-results' });
+    form.append(start, reset); body.append(form, el('p', {}, '同一账号、同一域的查询结果会复用 ' +
+      (HOMEWORK_PLAN_CACHE_TTL / 60000) + ' 分钟。重置后，下次查找会重新读取；上次完整计划仍保留。'));
+    const state = workStates.planner; if (!state.running) Object.assign(state, { status: '', message: '', errors: [], job: null });
+    workProgress(body, 'planner'); showWorkErrors(state); body.append(results);
+    const cancel = $('[data-exh-action="work-cancel"]', body); cancel.disabled = true;
+    let generation = 0, activeJob;
+    function assertPage() {
+      if (!dialog.open || !body.isConnected || epoch !== routeEpoch || address !== location.href || pageName() !== 'homework_main' ||
+          uid !== +user()._id || domain !== String(domainId()) || !settings.homeworkPlanner) throw workError('页面、账号或域已变化，请重新打开补题计划');
+    }
+    function resultLink(label, href, kind) {
+      // Only link to the two local routes the data module emits, including when restoring saved results.
+      try {
+        const url = new URL(href, location.origin);
+        if (url.origin === location.origin && url.pathname.startsWith('/d/' + seg(domain) + '/' + kind + '/'))
+          return el('a', { href: url.pathname + url.search, target: '_blank', rel: 'noopener noreferrer' }, label);
+      } catch { /* Render unreadable links as plain text. */ }
+      return el('span', {}, label);
+    }
+    function render(record, mode) {
+      results.replaceChildren();
+      if (!record) { results.append(el('p', {}, '还没有保存的补题计划。')); return; }
+      const f = record.filters, cached = mode === 'saved', partial = mode === 'partial';
+      const title = cached ? '上次保存的计划' : partial ? '部分结果（未保存）' : '本次补题计划';
+      results.append(el('h3', {}, title + ' · ' + record.rows.length + ' 道题'),
+        el('p', {}, f.from + ' 至 ' + f.to + ' · 至少 ' + f.threshold + ' 人通过 · 已读取 ' + record.scanned + '/' + record.matched +
+          ' 份匹配作业的榜单 · ' + new Date(record.time).toLocaleString()));
+      if (partial) results.append(el('p', {}, '有数据未能核实，只展示已确认的题目。' + (saved ? '上次完整计划仍保留。' : '')));
+      if (!record.rows.length) { results.append(el('p', {}, partial ? '已核实的数据中没有符合条件的题目。' : '此范围内没有符合条件的题目。')); return; }
+      const table = el('table'), head = el('thead'), th = el('tr'), list = el('tbody');
+      for (const label of ['题目', '最多通过人数', '来源作业（通过人数）']) th.append(el('th', { scope: 'col' }, label));
+      head.append(th); table.append(head, list); results.append(table);
+      let at = 0; const more = el('button', { type: 'button', class: 'button exhloj-local-button' });
+      function appendPage() {
+        const fragment = document.createDocumentFragment(), end = Math.min(at + 100, record.rows.length);
+        for (; at < end; at++) {
+          const row = record.rows[at], tr = el('tr'), problem = el('td'), source = el('td');
+          const pid = String(row.pid), title = String(row.title || pid);
+          problem.append(resultLink(title === pid || title.startsWith(pid + ' ') ? title : pid + ' · ' + title, row.href, 'p'));
+          for (const [i, hw] of row.homeworks.entries()) {
+            if (!hw) continue;
+            if (i) source.append('、'); source.append(resultLink(String(hw.title || hw.id), hw.href, 'homework'), '（' + hw.passed + '）');
+          }
+          tr.append(problem, el('td', {}, row.passed), source); fragment.append(tr);
+        }
+        list.append(fragment); more.hidden = at >= record.rows.length;
+        more.textContent = '显示更多（已显示 ' + at + '/' + record.rows.length + '）';
+      }
+      more.addEventListener('click', appendPage); results.append(more); appendPage();
+    }
+    render(saved, 'saved');
+    const busy = value => { start.disabled = value; cancel.disabled = !value; for (const input of $$('input', form)) input.disabled = value; };
+    dialog.addEventListener('close', () => { generation++; activeJob?.controller.abort(); }, { once: true });
+    reset.addEventListener('click', () => task(async () => {
+      assertPage(); generation++; activeJob?.controller.abort();
+      resetHomeworkPlanCache(domain); render(saved, 'saved');
+      if (!activeJob) Object.assign(state, { job: null, status: '就绪', errors: [], message: '已重置本域当前账号的请求缓存。' });
+      updateWorkProgress('planner'); showWorkErrors(state); notify('已重置补题计划缓存，可按当前条件重新查找');
+    }));
+    form.addEventListener('submit', event => {
+      event.preventDefault();
+      task(async () => {
+        assertPage(); if (activeJob || workJobs.has('planner')) throw workError('补题查找仍在结束，请稍后再试');
+        const from = form.elements.from.value, to = form.elements.to.value, threshold = Number(form.elements.threshold.value);
+        const first = new Date(from + 'T00:00:00'), last = new Date(to + 'T00:00:00');
+        if (localDateInput(first) !== from || localDateInput(last) !== to || first > last) throw workError('请选择有效的起止日期，结束日期不能早于开始日期');
+        if (!Number.isSafeInteger(threshold) || threshold < 1) throw workError('通过人数须为正整数');
+        last.setDate(last.getDate() + 1);
+        const token = ++generation, revision = homeworkPlanCacheRevision(domain);
+        busy(true); render(saved, 'saved');
+        try { await runWork('planner', async (job, work) => {
+          activeJob = job;
+          const check = () => { checkJob(job); assertPage(); if (generation !== token) throw workError('本次查找已取消'); };
+          const onProgress = message => { check(); work.message = message; updateWorkProgress('planner'); };
+          const plan = await scanHomeworkPlan({ domain, uid, start: +first, end: +last, threshold, pageLimit: settings.helperPageLimit, check, onProgress,
+            read: (path, view, project) => { check(); return homeworkPlanRead(job, domain, path, view, project); } });
+          check(); if (homeworkPlanCacheRevision(domain) !== revision) throw workError('补题缓存已重置，请重新查找');
+          const record = { schema: 1, revision, domain, uid, origin: location.origin, time: Date.now(), filters: { from, to, threshold },
+            rows: plan.rows, scanned: plan.scanned, matched: plan.matched };
+          if (plan.complete) {
+            try {
+              if (new Blob([JSON.stringify(record)]).size > LIMIT) throw new Error('too large');
+              save(key, record); saved = record; work.message = '已保存这次完整的补题计划。';
+            } catch { work.message = '本次结果可在这里查看，但未能写入本地存储。'; }
+          } else { work.status = '完成，部分结果'; work.message = '未核实的数据不会加入计划。'; }
+          work.errors.push(...plan.warnings); render(record, plan.complete ? 'fresh' : 'partial');
+        }); } finally {
+          activeJob = null; busy(false);
+          if (token !== generation && state.root === body && dialog.open) {
+            Object.assign(state, { job: null, status: '就绪', errors: [], message: '已重置本域当前账号的请求缓存。' });
+            updateWorkProgress('planner'); showWorkErrors(state);
+          }
+        }
+      });
+    });
+  }
+
+  function abandonPlannerView() {
+    workJobs.get('planner')?.controller.abort();
+    workStates.planner = {};
+    const dialog = $('dialog[data-exh-homework-plan]');
+    if (dialog) { dialog.close(); dialog.remove(); }
+  }
   function syncPageContext() {
-    const owner = String(user()._id || 0), name = pageName();
-    if (location.href !== route || owner !== routeOwner || name !== routeName) {
+    const owner = String(user()._id || 0), name = pageName(), domain = domainId();
+    if (location.href !== route || owner !== routeOwner || name !== routeName || domain !== routeDomain) {
       const accountChanged = owner !== routeOwner;
-      route = location.href; routeOwner = owner; routeName = name;
+      route = location.href; routeOwner = owner; routeName = name; routeDomain = domain;
       routeEpoch++; contextBody = {}; pageRequest = undefined;
+      abandonPlannerView();
       if ($('#exhloj-contest-files, #exhloj-profile-view')) $('#exhloj-local-dialog')?.close();
       semanticPanel?.controller?.abort();
       if (semanticPanel?.body.isConnected) renderSearchResults(semanticPanel);
@@ -4098,9 +4651,10 @@ l0,-`+(t+144)+`c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
   }
   function refresh() {
     syncPageContext();
+    if (!settings.homeworkPlanner && (workJobs.has('planner') || $('dialog[data-exh-homework-plan]'))) abandonPlannerView();
     document.documentElement.classList.toggle('exhloj-local-rounded', enabled('rounded'));
     document.documentElement.classList.toggle('exhloj-local-ui', settings.ui);
-    installMenu(); syncMenuVisibility();
+    installMenu(); syncMenuVisibility(); syncRankingLayout();
     try {
       if (page.UiContext) {
         if (!page.UiContext.exhloj) page.UiContext.exhloj = {};

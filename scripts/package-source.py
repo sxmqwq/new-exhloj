@@ -15,8 +15,10 @@ SOURCE_DIRS = ('.github', 'src', 'vendor', 'scripts', 'docs', 'tests')
 REQUIRED = (
     '.github/workflows/release.yml',
     'src/exhloj.template.js', 'vendor/markdown-renderer.js', 'vendor/pinyin.js',
+    'src/homework-plan-cache.js', 'src/homework-plan-data.js', 'src/homework-plan-ui.js',
     'scripts/build.cjs', 'scripts/package-release.py', 'scripts/package-source.py', 'scripts/release-notes.py',
     'tests/browser.cjs', 'tests/session.cjs', 'tests/package_test.py',
+    'tests/planner-browser.cjs', 'tests/homework-plan-cache.cjs', 'tests/homework-plan-data.cjs',
     'docs/INSTALL.zh-CN.txt', 'dist/exhloj.user.js',
 )
 
