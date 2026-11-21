@@ -1,6 +1,6 @@
 {
   "name": "extend-hloj-local",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "HLOJ 训练助手：题源、比赛、练习统计、用户资料和 Rating",
   "private": true,
   "engines": {
@@ -11,7 +11,8 @@
     "build:check": "node scripts/build.cjs --check",
     "build:vendor": "node scripts/build-vendor.mjs",
     "check": "node scripts/check.cjs",
-    "test": "node tests/browser.cjs && node tests/session.cjs && python3 tests/package_test.py",
+    "test": "npm run test:planner && node tests/browser.cjs && node tests/session.cjs && node tests/planner-browser.cjs && python3 tests/package_test.py",
+    "test:planner": "node tests/homework-plan-cache.cjs && node tests/homework-plan-data.cjs",
     "test:session": "node tests/session.cjs",
     "test:package": "python3 tests/package_test.py",
     "package": "python3 scripts/package-release.py",
