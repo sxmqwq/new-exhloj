@@ -7,7 +7,7 @@
 | `src/exhloj.template.js` | 功能源码与统一控制面板 |
 | `src/homework-plan-*.js` | 作业补题计划的接口缓存、榜单筛选与界面 |
 | `dist/exhloj.user.js` | 可安装脚本，包含所需依赖 |
-| `vendor/` | Markdown、公式与拼音处理库 |
+| `vendor/` | Markdown、公式、拼音与 PDF 文字提取库 |
 | `scripts/` | 构建、打包与发布说明生成 |
 | `tests/` | 模拟页面、真实 Cookie 会话及打包检查 |
 | `docs/` | 使用说明、算法说明与当前面板截图 |
@@ -49,6 +49,7 @@ npm run package:source:check
 - `DEFAULTS` / `normalizeSettings` / `openSettings`：设置和模块开关。
 - `remoteProblem` / `loadRemoteMeta`：题源与原站资料。`qojTitleOrigin` 仅识别当前题名中的独立 QOJ 编号。
 - `openSemanticSearch` / `semanticRequest` / `parseSearchResults`：原题机 POST JSON 与 CPRet GET JSON（其中候选 HTML 仅在惰性模板内解析）。输入明确提交后才请求，不附带凭据；按站点显示排名，默认不改写查询或调用重排。两个接口为上游网站自身使用的接口，变更或失败时保留打开原站的入口。
+- `src/semantic-pdf-*.js`：识别原题面中的 PDF 引用；只从当前题目的附加文件或当前比赛/作业的公开附件入口取文件，保留竞赛上下文。用内嵌 PDF.js 及中文 CMap 提取文本，不使用远程代码、第三方解析、OCR 或 PDF 渲染。成功结果按站点、账号、题目和附件在本页缓存 10 分钟。预算上限为 20 MiB、自动读取前 60 页；过大或文字层缺失时保留人工入口。换页、换账号、关面板均可终止读取。更新 PDF.js 后运行 `npm run build:pdf` 并核对许可证；`npm run test:pdf` 用真实合成 PDF 验证中文文字层。
 - `selectSearchCandidate` / `configureOrigin`：候选进入可编辑的确认配置，保存前检查题目、账号与原有映射，防止旧结果覆盖新页面。搜索缓存仅在内存中保留最近八组查询。
 - `LUOGU_DIFFICULTIES`：新版洛谷难度 0–8。`difficultyScale` 区分缓存和手动配置版本，旧手动设置按原颜色转换。
 - `runWork` / `workRequest` / `listPages`：串行请求、取消与请求限额。

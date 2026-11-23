@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const script = fs.readFileSync(require('node:path').join(__dirname, '../dist/exhloj.user.js'), 'utf8');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const { fixturePdf, memoryIntro, memoryPages, combinedPages } = require('./fixtures/pdf-text.cjs');
 const root = path.resolve(__dirname, '..');
 process.chdir(root);
 fs.mkdirSync('tests/output', { recursive: true });
@@ -18,7 +19,7 @@ async function fixture(name, body, context = {}, options = {}) {
   await page.route('**/*', async route => {
     const req = route.request();
     requests.push({ url: req.url(), method: req.method(), kind: req.resourceType(), data: req.postData(), headers: req.headers() });
-    if (req.isNavigationRequest()) return route.fulfill({ contentType: 'text/html', body: html(name, body, options.extra) });
+    if (req.isNavigationRequest()) return route.fulfill({ contentType: 'text/html', headers: options.pageHeaders, body: html(name, body, options.extra) });
     if (options.api) {
       const u = new URL(req.url());
       const spec = typeof options.api === 'function' ? await options.api(req) : options.api[`${req.method()} ${u.pathname}${u.search}`] || options.api[`${req.method()} ${u.pathname}`];
@@ -755,6 +756,90 @@ async function openDataPage(page) { await openControlCenter(page); await panelTa
     await f.page.locator('[data-exh-action="remote-search-run"]').click();
     await f.page.waitForFunction(() => document.querySelector('[data-exh-action="remote-search-cancel"]').disabled);
   }
+  const pdfTid = '6af000000000000000000000';
+  const pdfPath = '/d/test/p/5067?tid=' + pdfTid;
+  const pdfDownload = '/d/test/p/5067/file/memory.pdf?tid=' + pdfTid;
+  const pdfMarkup = '[本题样例文件](./5067/file/memory.zip?tid=' + pdfTid + ')\n\n@[pdf](./5067/file/memory.pdf?tid=' + pdfTid + ')';
+  async function pdfSearchFixture(content, response, opts = {}) {
+    const { title = '记忆（memory）', ...rest } = opts;
+    const f = await fixture('contest_detail_problem', remoteBody, {
+      pdoc:{ docId:5067, pid:'S5067', title, content, config:{} },
+      tdoc:{ docId:pdfTid, rule:'oi', pids:[1,2,3,5067,5] },
+    }, { path:pdfPath, strictApi:true, api:{ ['GET '+pdfDownload]:response },
+      storage:{ 'exhloj.coreui.settings.v1':{ remoteAuto:false, remoteContest:'show' } }, remote:searchLive, ...rest });
+    return { ...f, input:f.page.locator('#exhloj-search-query'), status:f.page.locator('#exhloj-search-pdf-status'),
+      async wait(message) {
+        await f.page.waitForFunction(msg=>document.querySelector('#exhloj-search-pdf-status')?.textContent.includes(msg),message,{timeout:12000});
+      } };
+  }
+  await check('search PDF: embedded contest attachment fills Chinese text, caches, refreshes and only searches on click', async () => {
+    const f = await pdfSearchFixture(pdfMarkup, { bytes:fixturePdf(memoryPages), contentType:'application/pdf' });
+    const pdfReads = () => f.requests.filter(r=>new URL(r.url).pathname.endsWith('/file/memory.pdf'));
+    assert.equal(pdfReads().length,0,'visiting a problem should not duplicate its PDF request');
+    await openSearch(f); await f.wait('已填入题意');
+    const query = await f.input.inputValue();
+    assert.ok(query.replace(/\s/g,'').includes(memoryIntro.replace(/\s/g,'')),query);
+    assert.doesNotMatch(query,/memory\.zip|memory\.pdf|tid=/); assert.match(await f.status.textContent(),/题面来源：memory.pdf/);
+    assert.equal(pdfReads().length,1); assert.equal(new URL(pdfReads()[0].url).searchParams.get('tid'),pdfTid);
+    assert.deepEqual(await f.page.evaluate(()=>window.__gm),[]);
+    await finishSearch(f);
+    const sent = await f.page.evaluate(()=>window.__gm); assert.equal(sent.length,2);
+    assert.equal(sent[0].payload.query,query.trim()); assert.equal(new URL(sent[1].url).searchParams.get('q'),query.trim());
+    assert.ok(sent.every(r=>r.anonymous));
+    await f.page.locator('[data-exh-action="close"]').click(); await openSearch(f); await f.wait('本页缓存');
+    assert.equal(pdfReads().length,1);
+    await f.page.locator('[data-exh-action="remote-search-fill"]').click(); await f.wait('已填入题意');
+    assert.equal(pdfReads().length,2);
+    assert.ok(f.requests.every(r=>!new URL(r.url).pathname.endsWith('.zip')));
+    await f.done();
+  });
+  await check('search PDF: whole booklet isolates the selected problem; ambiguous matches allow edited page preview under CSP', async () => {
+    const path = '/d/test/contest/' + pdfTid + '/file/public/booklet.pdf';
+    const content = '@[pdf](' + path + ')';
+    const api = { ['GET '+path]:{ bytes:fixturePdf(combinedPages), contentType:'application/pdf' } };
+    const f = await pdfSearchFixture(content, null, { api });
+    await openSearch(f); await f.wait('已填入题意');
+    const query = await f.input.inputValue();
+    assert.match(query.replace(/\s/g,''),/记忆/); assert.match(query,/每次询问的结果/); assert.doesNotMatch(query,/路径|方块|目录/);
+    await f.done();
+    const g = await pdfSearchFixture(content, null, { api, title:'另一道题', pageHeaders:{ 'Content-Security-Policy':"worker-src 'none'" } });
+    await openSearch(g); await g.wait('不能确定当前题的范围');
+    assert.equal(await g.input.inputValue(),''); assert.deepEqual(await g.page.evaluate(()=>window.__gm),[]);
+    const pane = g.page.locator('#exhloj-search-pdf-pages');
+    await pane.locator('[name=pdf-to]').fill('3'); await pane.locator('[name=pdf-from]').fill('3');
+    const preview = pane.locator('#exhloj-search-pdf-preview');
+    assert.match((await preview.inputValue()).replace(/\s/g,''),/记忆/);
+    assert.doesNotMatch(await preview.inputValue(),/路径|方块/);
+    await preview.fill(memoryIntro); await pane.getByRole('button',{name:'用预览文字填入搜索框'}).click();
+    assert.equal(await g.input.inputValue(),memoryIntro); assert.deepEqual(await g.page.evaluate(()=>window.__gm),[]);
+    await g.done();
+  });
+  await check('search PDF: denied or image-only attachments never become queries, and local file fallback is private', async () => {
+    const f = await pdfSearchFixture(pdfMarkup, { status:403, body:{ error:'permission denied' } });
+    await openSearch(f); await f.wait('没有附件访问权限'); assert.equal(await f.input.inputValue(),'');
+    await finishSearch(f); assert.deepEqual(await f.page.evaluate(()=>window.__gm),[]);
+    await f.input.fill(pdfMarkup); await finishSearch(f); assert.deepEqual(await f.page.evaluate(()=>window.__gm),[]);
+    await f.input.fill('');
+    await f.page.locator('#exhloj-search-pdf').getByText('读取本地 PDF').click();
+    await f.page.locator('#exhloj-search-pdf input[type=file]').setInputFiles({ name:'scan.pdf',mimeType:'application/pdf',buffer:fixturePdf([[]]) });
+    await f.wait('可能是扫描版'); assert.equal(await f.input.inputValue(),'');
+    await f.page.locator('#exhloj-search-pdf input[type=file]').setInputFiles({ name:'memory.pdf',mimeType:'application/pdf',buffer:fixturePdf(memoryPages) });
+    await f.wait('已填入题意'); assert.deepEqual(await f.page.evaluate(()=>window.__gm),[]);
+    assert.equal(f.requests.filter(r=>!r.url.startsWith('blob:')).length,2);
+    await f.done();
+  });
+  await check('search PDF: manual drafts survive a delayed read and account changes drop the PDF panel', async () => {
+    const f = await pdfSearchFixture(pdfMarkup,{ bytes:fixturePdf(memoryPages),delay:500 });
+    await openSearch(f); await f.input.fill('我已经自己写好了一份题意。');
+    await f.wait('已保留输入框内容');
+    assert.equal(await f.input.inputValue(),'我已经自己写好了一份题意。');
+    await f.page.evaluate(()=>{ window.UserContext._id=77; window.dispatchEvent(new Event('pjax:end')); });
+    await f.page.locator('#exhloj-local-dialog').waitFor({state:'hidden'});
+    await openSearch(f); await f.wait('已填入题意');
+    assert.equal(f.requests.filter(r=>new URL(r.url).pathname.endsWith('/file/memory.pdf')).length,2);
+    await f.done();
+  });
+
   await check('search: both live response schemas, explicit exact-query requests and manual-only source confirmation', async () => {
     const f = await searchFixture(); const before = await f.page.evaluate(() => JSON.stringify(window.__store));
     assert.deepEqual(await f.page.evaluate(() => window.__gm), []); await openSearch(f);
