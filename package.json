@@ -1,6 +1,6 @@
 {
   "name": "extend-hloj-local",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "description": "HLOJ 训练助手：题源、比赛、练习统计、用户资料和 Rating",
   "private": true,
   "engines": {
@@ -11,14 +11,16 @@
     "build:check": "node scripts/build.cjs --check",
     "build:vendor": "node scripts/build-vendor.mjs",
     "check": "node scripts/check.cjs",
-    "test": "npm run test:planner && node tests/browser.cjs && node tests/session.cjs && node tests/planner-browser.cjs && python3 tests/package_test.py",
+    "test": "npm run test:planner && npm run test:pdf && node tests/browser.cjs && node tests/session.cjs && node tests/planner-browser.cjs && python3 tests/package_test.py",
     "test:planner": "node tests/homework-plan-cache.cjs && node tests/homework-plan-data.cjs",
     "test:session": "node tests/session.cjs",
     "test:package": "python3 tests/package_test.py",
     "package": "python3 scripts/package-release.py",
     "package:check": "python3 scripts/package-release.py --check",
     "package:source": "npm run package:check && python3 scripts/package-source.py",
-    "package:source:check": "npm run package:check && python3 scripts/package-source.py --check"
+    "package:source:check": "npm run package:check && python3 scripts/package-source.py --check",
+    "build:pdf": "node scripts/build-pdf-vendor.mjs",
+    "test:pdf": "node tests/semantic-pdf.cjs"
   },
   "devDependencies": {
     "dompurify": "3.4.17",
@@ -26,6 +28,7 @@
     "katex": "0.18.10",
     "marked": "18.1.1",
     "marked-katex-extension": "5.1.13",
+    "pdfjs-dist": "6.5.438",
     "pinyin-pro": "3.29.5",
     "playwright": "1.62.1"
   }

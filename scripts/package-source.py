@@ -19,6 +19,8 @@ REQUIRED = (
     'scripts/build.cjs', 'scripts/package-release.py', 'scripts/package-source.py', 'scripts/release-notes.py',
     'tests/browser.cjs', 'tests/session.cjs', 'tests/package_test.py',
     'tests/planner-browser.cjs', 'tests/homework-plan-cache.cjs', 'tests/homework-plan-data.cjs',
+    'src/semantic-pdf-data.js', 'src/semantic-pdf-engine.js', 'src/semantic-pdf-ui.js',
+    'scripts/build-pdf-vendor.mjs', 'vendor/pdf-text-engine.js', 'tests/semantic-pdf.cjs', 'tests/fixtures/pdf-text.cjs',
     'docs/INSTALL.zh-CN.txt', 'dist/exhloj.user.js',
 )
 

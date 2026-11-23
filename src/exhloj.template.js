@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Extend HLOJ
 // @namespace    exhloj-local
-// @version      3.1.0
+// @version      3.2.0
 // @description  HLOJ 训练助手：题源与难度、比赛、练习统计、用户资料和 Rating。
 // @homepageURL  https://github.com/sxmqwq/new-exhloj
 // @supportURL   https://github.com/sxmqwq/new-exhloj/issues
@@ -42,7 +42,7 @@
  *       验证码识别不联网、不自动提交登录；不访问原插件后端。
  *       user 按需 GET 榜单、用户名或 OIerDb 官方公开数据；资料编辑与 Rating 结算只保存到本地，无指定 UID 的管理员限制。
  * 缓存使用明文 JSON。旧版 AES 密文不在本版导入范围内；不读取旧 token/密码。
- * 此文件按原 1.16.1 的功能重制，内嵌 marked / DOMPurify / KaTeX / marked-katex-extension 和离线拼音字典 pinyin-pro（第三方许可证随 ZIP 提供）；
+ * 此文件按原 1.16.1 的功能重制，内嵌 marked / DOMPurify / KaTeX / marked-katex-extension 和离线拼音字典 pinyin-pro、PDF.js 文字提取（第三方许可证随 ZIP 提供）；
  * 无远程代码依赖，使用本仓库的固定更新地址。更新现有脚本会保留存储。
  * 若作为新脚本安装，请停用旧版，并按需导入之前的 JSON 备份。
  */
@@ -54,9 +54,9 @@
   if (!(location.hostname === 'oj.hailiangedu.com' ||
       location.host === 'www.nfls.com.cn:10611' || /(^|\.)oifha\.com$/.test(location.hostname))) return;
   if (document.documentElement.dataset.exhlojCoreUi) return;
-  document.documentElement.dataset.exhlojCoreUi = '3.1.0';
+  document.documentElement.dataset.exhlojCoreUi = '3.2.0';
 
-  const VERSION = '3.1.0';
+  const VERSION = '3.2.0';
   const SETTINGS_KEY = 'exhloj.coreui.settings.v1';
   const CACHE_KEY = 'exhloj.coreui.cache.v1';
   const CAPTCHA_KEY = 'exhloj.local.captcha.history';
@@ -293,6 +293,13 @@
     .exhloj-remote-tools{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:10px 0}
     .exhloj-remote-tools a,.exhloj-remote-chip{display:inline-block;padding:4px 9px;border-radius:5px;background:#f0f4f8;color:#245173}
     .exhloj-remote-status{font-size:12px;opacity:.8;flex-basis:100%;overflow-wrap:anywhere}
+    #exhloj-search-pdf{margin:6px 0 12px;padding:7px 10px;border:1px solid #dbe4ed;border-radius:6px;overflow-wrap:anywhere}
+    #exhloj-search-pdf [hidden],#exhloj-search-pdf[hidden]{display:none!important}
+    #exhloj-search-pdf p{margin:4px 0}
+    #exhloj-search-pdf details{margin-top:6px}
+    #exhloj-search-pdf select,#exhloj-search-pdf input[type=file]{max-width:100%;min-width:0;color:inherit}
+    .exhloj-search-pdf-controls{display:flex;align-items:center;flex-wrap:wrap;gap:4px 12px}
+    #exhloj-search-pdf-preview{height:115px}
     .exhloj-search-options{display:flex;flex-wrap:wrap;gap:0 20px}
     .exhloj-search-note{color:#66788a;font-size:13px;overflow-wrap:anywhere}
     .exhloj-search-candidate{border:1px solid #dce5ee;border-radius:8px;padding:12px 14px;margin:10px 0;overflow-wrap:anywhere}
@@ -1476,6 +1483,10 @@
       group.rows.forEach((row, index) => appendCandidate(section, row, `${engine}-${index}`, `${index + 1}.`)); root.append(section);
     }
   }
+  /* @EXHLOJ_PDF_VENDOR@ */
+
+  /* @EXHLOJ_SEMANTIC_PDF@ */
+
   function openSemanticSearch() {
     if (!settings.remote) throw new Error('请先在设置中开启题源与题解');
     const body = modal('按题意搜索原题', 'remote'), context = originContext();
@@ -1483,9 +1494,9 @@
     semanticPanel = state;
     body.append(el('p', {}, context.key ? `当前题目：${current('pdoc').title || current('pdoc').pid || context.key}` : '可搜索相似题。在题目页打开此工具，才能将候选关联到当前题目。'));
     const label = el('label', { for: 'exhloj-search-query' }, '题面或题意简述'), input = el('textarea', { id: 'exhloj-search-query', placeholder: '保留要求计算的内容、操作与限制；也可直接粘贴题面。' });
-    input.value = markdownContent(current('pdoc')?.content || '').trim();
-    input.addEventListener('input', () => renderSearchResults(state));
-    body.append(label, input, el('p', { class: 'exhloj-search-note' }, '点击搜索才会把此框内容发送到勾选的网站。建议精简长题面；CPRet 最多处理 2048 token。'));
+    Object.assign(state, { input, automaticText:'', editRevision:0 });
+    input.addEventListener('input', () => { state.editRevision++; renderSearchResults(state); });
+    body.append(label, input, mountSearchPdfTools(state), el('p', { class: 'exhloj-search-note' }, '点击搜索才会把此框内容发送到勾选的网站。建议精简长题面；CPRet 最多处理 2048 token。'));
     const options = el('div', { class: 'exhloj-search-options' });
     for (const [engine, service] of Object.entries(SEARCH_ENGINES)) {
       const label = el('label'), checkbox = el('input', { type: 'checkbox', 'data-search-engine': engine }); checkbox.checked = true; label.append(checkbox, service.name); options.append(label);
@@ -1495,23 +1506,25 @@
     const links = el('p', { class: 'exhloj-panel-footer' });
     for (const service of Object.values(SEARCH_ENGINES)) links.append(el('a', { href: service.home, target: '_blank', rel: 'noopener noreferrer', referrerpolicy: 'no-referrer' }, `打开 ${service.name}`));
     body.append(links, el('p', { class: 'exhloj-search-note' }, '结果按网站分别排序，分数不能跨网站比较。相似度不代表同题，请核对题意、数据范围和样例后再保存。'), el('div', { id: 'exhloj-search-results', 'aria-live': 'polite' }));
-    state.dialog.addEventListener('close', () => state.controller?.abort(), { once: true });
+    state.dialog.addEventListener('close', () => { state.controller?.abort(); state.pdfController?.abort(); }, { once: true });
+    void task(() => applySearchStatement(state, current('pdoc')));
   }
   async function fillSearchStatement() {
     const state = semanticPanel; assertSearchPanel(state);
-    const input = $('#exhloj-search-query', state.body), before = input.value, pdoc = await problemDocument();
+    const before = state.input.value, revision = state.editRevision, pdoc = await problemDocument();
     assertSearchPanel(state);
-    if (input.value !== before) throw new Error('你已编辑题意，保留当前输入');
-    input.value = markdownContent(pdoc.content || '').trim();
-    renderSearchResults(state);
+    if (state.input.value !== before || state.editRevision !== revision) throw new Error('你已编辑题意，保留当前输入');
+    await applySearchStatement(state, pdoc, true);
   }
   async function runSemanticSearch() {
     const state = semanticPanel; assertSearchPanel(state);
     if (state.controller) return;
     const query = $('#exhloj-search-query', state.body).value.trim(), engines = $$('[data-search-engine]:checked', state.body).map(node => node.dataset.searchEngine);
-    if (!query) throw new Error('请先输入题面或题意');
+    if (!query) throw new Error(state.pdfController ? '正在读取 PDF；请稍等或手动填写题意' : '请先输入题面或题意');
+    if (pdfSearchContainsAttachment(query) || semanticPdfData.markdown(query).refs.length) throw new Error('请先提取或粘贴题意，并移除附件地址；未发送请求');
     if (query.length > 16000) throw new Error('题意超过 16000 字符，请精简后再搜索；未发送请求');
     if (!engines.length) throw new Error('请至少选择一个检索网站');
+    state.pdfController?.abort(new Error('已停止读取，使用当前输入的题意。'));
     const controller = new AbortController(); state.controller = controller; state.query = query;
     state.groups = Object.fromEntries(engines.map(engine => [engine, { rows: [], message: '正在搜索…' }]));
     const controls = [$('#exhloj-search-query', state.body), ...$$('[data-search-engine], [data-exh-action="remote-search-run"], [data-exh-action="remote-search-fill"]', state.body)];
@@ -3814,7 +3827,12 @@
       abandonPlannerView();
       if ($('#exhloj-contest-files, #exhloj-profile-view')) $('#exhloj-local-dialog')?.close();
       semanticPanel?.controller?.abort();
-      if (semanticPanel?.body.isConnected) renderSearchResults(semanticPanel);
+      semanticPanel?.pdfController?.abort();
+      if (semanticPanel?.body.isConnected && !semanticPanel.pdfControls?.area.hidden) {
+        semanticPanel.dialog.close(); semanticPanel.dialog.remove();
+      }
+      else if (semanticPanel?.body.isConnected) renderSearchResults(semanticPanel);
+      if (accountChanged) semanticPdfCache.clear();
       if (accountChanged) for (const job of workJobs.values()) job.controller.abort();
       workJobs.get('user')?.controller.abort(); ratingTimeline = undefined;
       if (workJobs.get('oier')?.quick) workJobs.get('oier').controller.abort();
