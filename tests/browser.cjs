@@ -1396,7 +1396,8 @@ async function openDataPage(page) { await openControlCenter(page); await panelTa
       assert.equal(f.requests.length, 1); assert.deepEqual(await f.page.evaluate(() => window.__gm), []); assert.equal(await f.page.evaluate(() => window.injected), undefined);
       await f.page.locator('[data-exh-action="user-clear"]').click(); cache = await f.page.evaluate(() => JSON.parse(window.__store['exhloj.coreui.cache.v1'])); assert.equal(cache['exhloj.user'].oiers[876], undefined); assert.ok(!cache['exhloj.user'].teachers.includes(876)); await f.done();
     }
-    assert.ok(!/isAdmin|===\s*(?:46|151)\b/.test(script));
+    // Audit the authored authorization logic, excluding byte constants in bundled parsers.
+    assert.doesNotMatch(fs.readFileSync('src/exhloj.template.js', 'utf8'), /isAdmin|===\s*(?:46|151)\b/);
   });
   await check('user: profile info, prizes, OIerDB, default rating and late profile context', async () => {
     const f = await fixture('user_detail', '<a class="user-profile-name" href="/user/7">七号 (seven)</a>', { udoc: { _id: 7, uname: 'seven' } }, { storage: userStorage(), path: '/user/7' });
